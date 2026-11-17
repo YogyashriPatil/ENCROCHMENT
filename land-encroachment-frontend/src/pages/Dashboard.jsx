@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import API from "../services/api";
 import {
   Map,
   Building2,
@@ -107,9 +109,29 @@ function StatCard({ item }) {
 }
 
 export default function Dashboard() {
+  const [backendStatus, setBackendStatus] = useState("Checking...");
+
+  useEffect(() => {
+    API.get("/health")
+      .then((response) => {
+        setBackendStatus(response.data.status);
+      })
+      .catch((error) => {
+        console.error("Backend connection failed:", error);
+        setBackendStatus("Disconnected");
+      });
+  }, []);
   return (
     <div className="space-y-8">
+      <div className="mt-4 rounded-xl border border-white/10 bg-[#111827] p-4">
+        <p className="text-sm text-gray-400">
+          Backend API Status
+        </p>
 
+        <p className="mt-2 font-semibold text-emerald-400">
+          {backendStatus}
+        </p>
+      </div>
       <div>
         <h1 className="text-2xl font-bold">
           Overview Dashboard
