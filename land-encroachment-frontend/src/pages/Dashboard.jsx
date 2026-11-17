@@ -6,7 +6,19 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
-
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 const stats = [
   {
     title: "Monitored Land Area",
@@ -41,7 +53,26 @@ const stats = [
     positive: true,
   },
 ];
+const monitoringData = [
+  { month: "Jan", changes: 12, detections: 5 },
+  { month: "Feb", changes: 18, detections: 9 },
+  { month: "Mar", changes: 15, detections: 7 },
+  { month: "Apr", changes: 28, detections: 14 },
+  { month: "May", changes: 22, detections: 11 },
+  { month: "Jun", changes: 35, detections: 19 },
+  { month: "Jul", changes: 30, detections: 16 },
+  { month: "Aug", changes: 42, detections: 23 },
+  { month: "Sep", changes: 38, detections: 20 },
+  { month: "Oct", changes: 48, detections: 29 },
+  { month: "Nov", changes: 44, detections: 25 },
+  { month: "Dec", changes: 55, detections: 32 },
+];
 
+const riskData = [
+  { name: "High Risk", value: 18, color: "#ef4444" },
+  { name: "Medium Risk", value: 42, color: "#f59e0b" },
+  { name: "Low Risk", value: 66, color: "#10b981" },
+];
 function StatCard({ item }) {
   const Icon = item.icon;
 
@@ -106,10 +137,74 @@ export default function Dashboard() {
             Sample monitoring summary
           </p>
 
-          <div className="h-64 flex items-center justify-center border border-dashed border-white/10 rounded-xl mt-6">
-            <p className="text-gray-500 text-sm">
-              Analytics chart coming next
-            </p>
+          <div className="h-72 mt-6">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monitoringData}>
+
+                <defs>
+                  <linearGradient
+                    id="changeGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="5%"
+                      stopColor="#10b981"
+                      stopOpacity={0.35}
+                    />
+
+                    <stop
+                      offset="95%"
+                      stopColor="#10b981"
+                      stopOpacity={0}
+                    />
+                  </linearGradient>
+                </defs>
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#263449"
+                />
+
+                <XAxis
+                  dataKey="month"
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 12 }}
+                />
+
+                <YAxis stroke="#94a3b8" />
+
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#111c2e",
+                    border: "1px solid #334155",
+                    borderRadius: "10px",
+                    color: "#fff",
+                  }}
+                />
+
+                <Area
+                  type="monotone"
+                  dataKey="changes"
+                  name="Land Changes"
+                  stroke="#10b981"
+                  fill="url(#changeGradient)"
+                  strokeWidth={3}
+                />
+
+                <Area
+                  type="monotone"
+                  dataKey="detections"
+                  name="New Structures"
+                  stroke="#38bdf8"
+                  fill="transparent"
+                  strokeWidth={2}
+                />
+
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
@@ -118,26 +213,48 @@ export default function Dashboard() {
             Risk Distribution
           </h2>
 
-          <div className="space-y-6 mt-8">
-            {[
-              { name: "High Risk", value: 18, color: "bg-red-500" },
-              { name: "Medium Risk", value: 42, color: "bg-yellow-500" },
-              { name: "Low Risk", value: 66, color: "bg-emerald-500" },
-            ].map((risk) => (
-              <div key={risk.name}>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-300">{risk.name}</span>
-                  <span className="text-white">{risk.value}</span>
-                </div>
+          <div className="h-64 mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
 
-                <div className="h-2 rounded-full bg-white/10">
-                  <div
-                    className={`h-2 rounded-full ${risk.color}`}
-                    style={{ width: `${(risk.value / 126) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+                <Pie
+                  data={riskData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={90}
+                  paddingAngle={5}
+                >
+                  {riskData.map((entry) => (
+                    <Cell
+                      key={entry.name}
+                      fill={entry.color}
+                    />
+                  ))}
+                </Pie>
+
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#111c2e",
+                    border: "1px solid #334155",
+                    borderRadius: "10px",
+                    color: "#fff",
+                  }}
+                />
+
+                <Legend
+                  verticalAlign="bottom"
+                  iconType="circle"
+                  wrapperStyle={{
+                    fontSize: "12px",
+                    color: "#94a3b8",
+                  }}
+                />
+
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
