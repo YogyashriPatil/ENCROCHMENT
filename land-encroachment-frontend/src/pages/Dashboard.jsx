@@ -1,12 +1,198 @@
+import {
+  Map,
+  Building2,
+  AlertTriangle,
+  ShieldCheck,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
+
+const stats = [
+  {
+    title: "Monitored Land Area",
+    value: "12,450",
+    unit: "Acres",
+    change: "+8.2%",
+    icon: Map,
+    positive: true,
+  },
+  {
+    title: "Buildings Detected",
+    value: "2,840",
+    unit: "Buildings",
+    change: "+12.5%",
+    icon: Building2,
+    positive: true,
+  },
+  {
+    title: "Potential Encroachments",
+    value: "126",
+    unit: "Cases",
+    change: "+4.3%",
+    icon: AlertTriangle,
+    positive: false,
+  },
+  {
+    title: "High Risk Cases",
+    value: "18",
+    unit: "Cases",
+    change: "-2.1%",
+    icon: ShieldCheck,
+    positive: true,
+  },
+];
+
+function StatCard({ item }) {
+  const Icon = item.icon;
+
+  return (
+    <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-5">
+      <div className="flex items-center justify-between">
+        <div className="w-11 h-11 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+          <Icon size={22} className="text-emerald-400" />
+        </div>
+
+        <span className={`text-xs flex items-center gap-1 ${
+          item.positive ? "text-emerald-400" : "text-red-400"
+        }`}>
+          {item.positive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+          {item.change}
+        </span>
+      </div>
+
+      <h2 className="text-3xl font-bold mt-5">
+        {item.value}
+      </h2>
+
+      <p className="text-gray-400 text-sm mt-1">
+        {item.title}
+      </p>
+
+      <p className="text-gray-600 text-xs mt-2">
+        {item.unit}
+      </p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   return (
-    <div className="text-white">
-      <h1 className="text-3xl font-bold">
-        TerraWatch Dashboard
-      </h1>
-      <p className="mt-2 text-gray-400">
-        AI-Based Intelligent Land Encroachment Detection and Monitoring
-      </p>
+    <div className="space-y-8">
+
+      <div>
+        <h1 className="text-2xl font-bold">
+          Overview Dashboard
+        </h1>
+
+        <p className="text-gray-400 text-sm mt-2">
+          Monitor land changes and potential encroachment activities.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        {stats.map((item) => (
+          <StatCard key={item.title} item={item} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+
+        <div className="xl:col-span-2 bg-[#111c2e] border border-white/10 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold">
+            Monitoring Overview
+          </h2>
+
+          <p className="text-gray-400 text-sm mt-1">
+            Sample monitoring summary
+          </p>
+
+          <div className="h-64 flex items-center justify-center border border-dashed border-white/10 rounded-xl mt-6">
+            <p className="text-gray-500 text-sm">
+              Analytics chart coming next
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold">
+            Risk Distribution
+          </h2>
+
+          <div className="space-y-6 mt-8">
+            {[
+              { name: "High Risk", value: 18, color: "bg-red-500" },
+              { name: "Medium Risk", value: 42, color: "bg-yellow-500" },
+              { name: "Low Risk", value: 66, color: "bg-emerald-500" },
+            ].map((risk) => (
+              <div key={risk.name}>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-300">{risk.name}</span>
+                  <span className="text-white">{risk.value}</span>
+                </div>
+
+                <div className="h-2 rounded-full bg-white/10">
+                  <div
+                    className={`h-2 rounded-full ${risk.color}`}
+                    style={{ width: `${(risk.value / 126) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
+      <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-6">
+        <h2 className="text-lg font-semibold">
+          Recent Detection Activity
+        </h2>
+
+        <p className="text-gray-400 text-sm mt-1">
+          Illustrative sample cases for interface development
+        </p>
+
+        <div className="overflow-x-auto mt-5">
+          <table className="w-full text-sm text-left">
+            <thead className="text-gray-500 border-b border-white/10">
+              <tr>
+                <th className="py-3">Case ID</th>
+                <th>Location</th>
+                <th>Area</th>
+                <th>Risk Level</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-white/5">
+              <tr>
+                <td className="py-4">ENC-001</td>
+                <td>Zone A</td>
+                <td>450 sq.m</td>
+                <td className="text-red-400">High</td>
+                <td className="text-yellow-400">Under Review</td>
+              </tr>
+
+              <tr>
+                <td className="py-4">ENC-002</td>
+                <td>Zone B</td>
+                <td>280 sq.m</td>
+                <td className="text-yellow-400">Medium</td>
+                <td className="text-emerald-400">Pending Review</td>
+              </tr>
+
+              <tr>
+                <td className="py-4">ENC-003</td>
+                <td>Zone C</td>
+                <td>120 sq.m</td>
+                <td className="text-emerald-400">Low</td>
+                <td className="text-emerald-400">Pending Review</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 }
