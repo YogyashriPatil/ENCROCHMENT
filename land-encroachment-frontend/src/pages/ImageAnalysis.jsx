@@ -13,7 +13,10 @@ import {
   RefreshCw,
   CalendarDays,
   Activity,
+  LoaderCircle,
 } from "lucide-react";
+
+import API from "../services/api";
 
 function ImageUploadCard({
   title,
@@ -22,11 +25,12 @@ function ImageUploadCard({
   onChange,
   date,
   onDateChange,
+  imageType,
+  onImageTypeChange,
   icon: Icon,
 }) {
   return (
     <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-5">
-
       <div className="flex items-center gap-3 mb-5">
         <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
           <Icon size={20} className="text-emerald-400" />
@@ -43,13 +47,12 @@ function ImageUploadCard({
       <label className="block cursor-pointer">
         <input
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/tiff"
           className="hidden"
           onChange={(e) => onChange(e.target.files?.[0] || null)}
         />
 
         <div className="h-52 border-2 border-dashed border-white/15 hover:border-emerald-500/50 rounded-xl flex flex-col items-center justify-center overflow-hidden transition">
-
           {file ? (
             <img
               src={URL.createObjectURL(file)}
@@ -59,17 +62,14 @@ function ImageUploadCard({
           ) : (
             <>
               <Upload size={30} className="text-emerald-400 mb-3" />
-
               <p className="text-sm text-gray-300">
                 Click to upload image
               </p>
-
               <p className="text-xs text-gray-500 mt-2">
-                PNG, JPG, JPEG, WebP
+                PNG, JPG, JPEG, WebP, TIFF
               </p>
             </>
           )}
-
         </div>
       </label>
 
@@ -90,6 +90,21 @@ function ImageUploadCard({
       )}
 
       <div className="mt-4">
+        <label className="text-xs text-gray-400 mb-2 block">
+          Image Source
+        </label>
+
+        <select
+          value={imageType}
+          onChange={(e) => onImageTypeChange(e.target.value)}
+          className="w-full bg-[#0b1424] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+        >
+          <option value="Satellite">Satellite</option>
+          <option value="Drone">Drone</option>
+        </select>
+      </div>
+
+      <div className="mt-4">
         <label className="text-xs text-gray-400 flex items-center gap-2 mb-2">
           <CalendarDays size={14} />
           Image Capture Date
@@ -102,7 +117,6 @@ function ImageUploadCard({
           className="w-full bg-[#0b1424] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
         />
       </div>
-
     </div>
   );
 }
@@ -114,24 +128,97 @@ export default function ImageAnalysis() {
   const [oldDate, setOldDate] = useState("2025-01-15");
   const [newDate, setNewDate] = useState("2026-01-15");
 
-  const [analysisDone, setAnalysisDone] = useState(false);
-  const [error, setError] = useState("");
+  const [oldType, setOldType] = useState("Satellite");
+  const [newType, setNewType] = useState("Satellite");
 
-  const handleAnalysis = () => {
+  const [analysisDone, setAnalysisDone] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [uploadedImages, setUploadedImages] = useState([]);
+
+  const handleAnalysis = async () => {
     if (!oldImage || !newImage) {
-      setError("Please upload both old and new satellite images.");
+      setError("Please upload both previous and latest images.");
+      return;
+    }
+
+    if (oldDate >= newDate) {
+      setError("Latest image date must be after previous image date.");
       return;
     }
 
     setError("");
-    setAnalysisDone(true);
+    setSuccess("");
+    setAnalysisDone(false);
+    setUploadedImages([]);
+    setLoading(true);
+
+    try {
+      const uploadOneImage = async (file, imageType, imageDate) => {
+        const formData = new FormData();
+
+        formData.append("image", file);
+        formData.append("image_type", imageType);
+        formData.append("image_date", imageDate);
+
+        const response = await API.post(
+          "/images/upload",
+          formData
+        );
+
+        return response.data;
+      };
+
+      // Upload previous image first.
+      const oldResult = await uploadOneImage(
+        oldImage,
+        oldType,
+        oldDate
+      );
+
+      // Upload latest image.
+      const newResult = await uploadOneImage(
+        newImage,
+        newType,
+        newDate
+      );
+
+      setUploadedImages([
+        oldResult.data,
+        newResult.data,
+      ]);
+
+      setSuccess("Both images uploaded successfully to Supabase Storage!");
+      setAnalysisDone(true);
+
+    } catch (err) {
+      console.error("Image upload error:", err);
+
+      setError(
+        err.response?.data?.message ||
+        "Image upload failed. Please check your backend connection."
+      );
+
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetAnalysis = () => {
     setOldImage(null);
     setNewImage(null);
+
+    setOldDate("2025-01-15");
+    setNewDate("2026-01-15");
+
+    setOldType("Satellite");
+    setNewType("Satellite");
+
     setAnalysisDone(false);
+    setUploadedImages([]);
     setError("");
+    setSuccess("");
   };
 
   return (
@@ -139,14 +226,13 @@ export default function ImageAnalysis() {
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-
         <div>
           <h1 className="text-2xl font-bold">
             AI Image Analysis
           </h1>
 
           <p className="text-gray-400 text-sm mt-2">
-            Analyze satellite and drone imagery to identify land changes.
+            Upload and compare satellite and drone imagery.
           </p>
         </div>
 
@@ -154,12 +240,10 @@ export default function ImageAnalysis() {
           <Activity size={16} />
           Analysis Workspace
         </div>
-
       </div>
 
       {/* Information Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
         {[
           {
             title: "Image Comparison",
@@ -196,7 +280,6 @@ export default function ImageAnalysis() {
             </div>
           );
         })}
-
       </div>
 
       {/* Upload Section */}
@@ -207,7 +290,8 @@ export default function ImageAnalysis() {
           </h2>
 
           <p className="text-gray-400 text-sm mt-1">
-            Upload two images of the same geographical area captured at different times.
+            Upload two images of the same geographical area
+            captured at different times.
           </p>
         </div>
 
@@ -215,11 +299,13 @@ export default function ImageAnalysis() {
 
           <ImageUploadCard
             title="Previous Image"
-            description="Historical satellite imagery"
+            description="Historical imagery"
             file={oldImage}
             onChange={setOldImage}
             date={oldDate}
             onDateChange={setOldDate}
+            imageType={oldType}
+            onImageTypeChange={setOldType}
             icon={Satellite}
           />
 
@@ -230,17 +316,27 @@ export default function ImageAnalysis() {
             onChange={setNewImage}
             date={newDate}
             onDateChange={setNewDate}
+            imageType={newType}
+            onImageTypeChange={setNewType}
             icon={Drone}
           />
 
         </div>
       </div>
 
-      {/* Error */}
+      {/* Error Message */}
       {error && (
         <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm">
           <AlertTriangle size={18} />
           {error}
+        </div>
+      )}
+
+      {/* Success Message */}
+      {success && (
+        <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl text-sm">
+          <CheckCircle2 size={18} />
+          {success}
         </div>
       )}
 
@@ -249,16 +345,24 @@ export default function ImageAnalysis() {
 
         <button
           onClick={handleAnalysis}
-          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium transition"
+          disabled={loading}
+          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-medium transition"
         >
-          <ScanSearch size={18} />
-          Compare Images
-          <ArrowRight size={17} />
+          {loading ? (
+            <LoaderCircle size={18} className="animate-spin" />
+          ) : (
+            <ScanSearch size={18} />
+          )}
+
+          {loading ? "Uploading Images..." : "Upload & Compare"}
+
+          {!loading && <ArrowRight size={17} />}
         </button>
 
         <button
           onClick={resetAnalysis}
-          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-5 py-3 rounded-xl text-sm"
+          disabled={loading}
+          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-5 py-3 rounded-xl text-sm disabled:opacity-50"
         >
           <RefreshCw size={16} />
           Reset
@@ -266,7 +370,7 @@ export default function ImageAnalysis() {
 
       </div>
 
-      {/* Demonstration Results */}
+      {/* Upload Results */}
       {analysisDone && (
         <div className="space-y-5">
 
@@ -274,7 +378,7 @@ export default function ImageAnalysis() {
             <CheckCircle2 className="text-emerald-400" />
 
             <h2 className="text-xl font-semibold">
-              Image Comparison Preview
+              Image Upload Successful
             </h2>
           </div>
 
@@ -291,12 +395,16 @@ export default function ImageAnalysis() {
 
                 <img
                   src={URL.createObjectURL(file)}
-                  alt="Uploaded satellite imagery"
+                  alt="Uploaded imagery"
                   className="w-full h-64 object-cover rounded-lg"
                 />
 
                 <p className="text-xs text-gray-400 mt-3">
-                  {index === 0 ? oldDate : newDate}
+                  Capture Date: {index === 0 ? oldDate : newDate}
+                </p>
+
+                <p className="text-xs text-emerald-400 mt-2">
+                  {uploadedImages[index]?.storage_path}
                 </p>
               </div>
             ))}
@@ -309,13 +417,14 @@ export default function ImageAnalysis() {
               <AlertTriangle size={20} />
 
               <h3 className="font-semibold">
-                Analysis Preview
+                AI Processing Status
               </h3>
             </div>
 
             <p className="text-gray-300 text-sm mt-3">
-              Both images have been uploaded successfully. They are ready
-              for processing by the change-detection model.
+              Both images have been uploaded and their metadata
+              saved in the database. They are ready for
+              integration with the change-detection model.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
@@ -326,7 +435,7 @@ export default function ImageAnalysis() {
                 </p>
 
                 <h3 className="text-2xl font-bold mt-2">
-                  2
+                  {uploadedImages.length}
                 </h3>
               </div>
 
@@ -343,9 +452,9 @@ export default function ImageAnalysis() {
             </div>
 
             <p className="text-xs text-gray-500 mt-4">
-              This is an upload and comparison preview only.
-              No actual AI change detection or encroachment prediction
-              has been performed yet.
+              Upload and comparison preview only.
+              Actual AI change detection and encroachment
+              prediction have not been implemented yet.
             </p>
 
           </div>

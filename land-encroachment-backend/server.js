@@ -8,6 +8,8 @@ import parcelRoutes from "./src/routes/parcelRoutes.js";
 import imageRoutes from "./src/routes/imageRoutes.js";
 import changeRoutes from "./src/routes/changeRoutes.js";
 import caseRoutes from "./src/routes/caseRoutes.js";
+import verificationRoutes from "./src/routes/verificationRoutes.js";
+
 dotenv.config();
 
 const app = express();
@@ -67,7 +69,7 @@ app.use("/api/parcels", parcelRoutes);
 app.use("/api/images", imageRoutes);
 app.use("/api/changes", changeRoutes);
 app.use("/api/cases", caseRoutes);
-
+app.use("/api/verifications", verificationRoutes);
 // Start server
 const PORT = process.env.PORT || 5000;
 
