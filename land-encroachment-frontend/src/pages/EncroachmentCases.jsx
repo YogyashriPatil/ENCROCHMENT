@@ -1,11 +1,12 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import API from "../services/api";
+
 import {
   Search,
   Filter,
   AlertTriangle,
   MapPin,
-  Building2,
   Calendar,
   Eye,
   CheckCircle2,
@@ -15,72 +16,8 @@ import {
   X,
   ShieldCheck,
   Activity,
+  RefreshCw,
 } from "lucide-react";
-
-// Illustrative demo records.
-// These are NOT actual AI detections or verified land records.
-const initialCases = [
-  {
-    id: "ENC-001",
-    parcel: "P-101",
-    location: "Zone A, Nashik",
-    area: 450,
-    risk: "High",
-    status: "Under Review",
-    date: "2026-11-12",
-    description:
-      "A possible new building structure was identified near the monitored parcel boundary.",
-    confidence: 94,
-  },
-  {
-    id: "ENC-002",
-    parcel: "P-102",
-    location: "Zone B, Nashik",
-    area: 280,
-    risk: "Medium",
-    status: "Under Review",
-    date: "2026-11-10",
-    description:
-      "A possible land-use change was identified in the latest imagery.",
-    confidence: 86,
-  },
-  {
-    id: "ENC-003",
-    parcel: "P-103",
-    location: "Zone C, Nashik",
-    area: 620,
-    risk: "High",
-    status: "Verified",
-    date: "2026-11-08",
-    description:
-      "A potential structure expansion requires further administrative review.",
-    confidence: 97,
-  },
-  {
-    id: "ENC-004",
-    parcel: "P-104",
-    location: "Zone A, Nashik",
-    area: 150,
-    risk: "Low",
-    status: "Rejected",
-    date: "2026-11-05",
-    description:
-      "An apparent image difference was reviewed and not considered a potential case.",
-    confidence: 72,
-  },
-  {
-    id: "ENC-005",
-    parcel: "P-105",
-    location: "Zone D, Nashik",
-    area: 390,
-    risk: "Medium",
-    status: "Under Review",
-    date: "2026-11-03",
-    description:
-      "A possible construction footprint change was detected between image dates.",
-    confidence: 89,
-  },
-];
 
 const riskStyles = {
   High: "bg-red-500/10 text-red-400 border-red-500/20",
@@ -89,12 +26,9 @@ const riskStyles = {
 };
 
 const statusStyles = {
-  "Under Review":
-    "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  Verified:
-    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Rejected:
-    "bg-gray-500/10 text-gray-400 border-gray-500/20",
+  "Under Review": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  Verified: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  Rejected: "bg-gray-500/10 text-gray-400 border-gray-500/20",
 };
 
 function StatCard({ title, value, icon: Icon, color }) {
@@ -106,6 +40,7 @@ function StatCard({ title, value, icon: Icon, color }) {
           <Icon size={20} />
         </div>
       </div>
+
       <h2 className="mt-4 text-3xl font-bold text-white">
         {value}
       </h2>
@@ -114,11 +49,78 @@ function StatCard({ title, value, icon: Icon, color }) {
 }
 
 export default function EncroachmentCases() {
-  const [cases, setCases] = useState(initialCases);
+  const [cases, setCases] = useState([]);
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedCase, setSelectedCase] = useState(null);
+
+  const [verificationHistory, setVerificationHistory] = useState([]);
+  const [remarks, setRemarks] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Retrieve real cases from PostgreSQL
+  const fetchCases = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await API.get("/cases");
+      const records = response.data.data || [];
+
+      const formattedCases = records.map((item) => ({
+        ...item,
+        displayId: item.case_code || item.id,
+        parcel: item.parcel_code || item.parcel_id || "Not linked",
+        location: item.location_name || "Location unavailable",
+        area: item.affected_area_sq_m,
+        risk: item.risk_level,
+        date: item.created_at
+          ? new Date(item.created_at).toLocaleDateString("en-IN")
+          : "N/A",
+        confidence: item.confidence ?? item.change_confidence ?? null,
+      }));
+
+      setCases(formattedCases);
+
+      // Keep the selected case updated after a refresh
+      setSelectedCase((previous) => {
+        if (!previous) return null;
+        return formattedCases.find((item) => item.id === previous.id) || null;
+      });
+
+    } catch (err) {
+      console.error("Fetch cases error:", err);
+      setError(
+        err.response?.data?.message ||
+        "Unable to retrieve encroachment cases."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Retrieve verification history for selected case
+  const fetchVerificationHistory = async (caseId) => {
+    try {
+      const response = await API.get(
+        `/verifications/case/${caseId}`
+      );
+
+      setVerificationHistory(response.data.data || []);
+    } catch (err) {
+      console.error("Verification history error:", err);
+      setVerificationHistory([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchCases();
+  }, []);
 
   const stats = {
     total: cases.length,
@@ -133,10 +135,12 @@ export default function EncroachmentCases() {
 
   const filteredCases = useMemo(() => {
     return cases.filter((item) => {
+      const searchText = search.toLowerCase();
+
       const searchMatch =
-        item.id.toLowerCase().includes(search.toLowerCase()) ||
-        item.parcel.toLowerCase().includes(search.toLowerCase()) ||
-        item.location.toLowerCase().includes(search.toLowerCase());
+        String(item.displayId).toLowerCase().includes(searchText) ||
+        String(item.parcel).toLowerCase().includes(searchText) ||
+        String(item.location).toLowerCase().includes(searchText);
 
       const riskMatch =
         riskFilter === "All" || item.risk === riskFilter;
@@ -148,21 +152,62 @@ export default function EncroachmentCases() {
     });
   }, [cases, search, riskFilter, statusFilter]);
 
-  const updateStatus = (caseId, newStatus) => {
-    setCases((previousCases) =>
-      previousCases.map((item) =>
-        item.id === caseId
-          ? { ...item, status: newStatus }
-          : item
-      )
-    );
-
-    setSelectedCase((previous) =>
-      previous?.id === caseId
-        ? { ...previous, status: newStatus }
-        : previous
-    );
+  const openCaseDetails = (item) => {
+    setSelectedCase(item);
+    setRemarks("");
+    setSuccess("");
+    fetchVerificationHistory(item.id);
   };
+
+  // Submit human verification to the backend
+  const submitVerification = async (decision) => {
+    if (!selectedCase) return;
+
+    try {
+      setSaving(true);
+      setError("");
+      setSuccess("");
+
+      await API.post("/verifications", {
+        case_id: selectedCase.id,
+        reviewer_id: null,
+        decision,
+        remarks: remarks.trim(),
+      });
+
+      setSuccess(
+        decision === "Verified"
+          ? "Case verification submitted successfully."
+          : "Case rejection submitted successfully."
+      );
+
+      await fetchCases();
+      await fetchVerificationHistory(selectedCase.id);
+
+      setSelectedCase((previous) =>
+        previous
+          ? { ...previous, status: decision }
+          : null
+      );
+
+      setRemarks("");
+
+    } catch (err) {
+      console.error("Verification submission error:", err);
+
+      setError(
+        err.response?.data?.message ||
+        "Unable to submit verification."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getRiskColor = (risk) => riskStyles[risk] || "text-gray-400";
+
+  const getStatusColor = (status) =>
+    statusStyles[status] || "text-gray-400";
 
   return (
     <div className="min-h-screen space-y-6 text-white">
@@ -173,6 +218,7 @@ export default function EncroachmentCases() {
           <h1 className="text-3xl font-bold">
             Encroachment Cases
           </h1>
+
           <p className="mt-2 text-sm text-gray-400">
             Review and manage potential land encroachment cases.
           </p>
@@ -184,6 +230,19 @@ export default function EncroachmentCases() {
         </div>
       </div>
 
+      {/* Error and Success Messages */}
+      {error && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400">
+          {success}
+        </div>
+      )}
+
       {/* Statistics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -192,18 +251,21 @@ export default function EncroachmentCases() {
           icon={FileText}
           color="bg-blue-500/10 text-blue-400"
         />
+
         <StatCard
           title="High Risk Cases"
           value={stats.high}
           icon={AlertTriangle}
           color="bg-red-500/10 text-red-400"
         />
+
         <StatCard
           title="Under Review"
           value={stats.review}
           icon={Clock}
           color="bg-amber-500/10 text-amber-400"
         />
+
         <StatCard
           title="Verified Cases"
           value={stats.verified}
@@ -221,6 +283,7 @@ export default function EncroachmentCases() {
               size={18}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
             />
+
             <input
               type="text"
               placeholder="Search by case ID, parcel ID or location..."
@@ -230,7 +293,7 @@ export default function EncroachmentCases() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Filter size={18} className="text-gray-400" />
 
             <select
@@ -254,6 +317,18 @@ export default function EncroachmentCases() {
               <option value="Verified">Verified</option>
               <option value="Rejected">Rejected</option>
             </select>
+
+            <button
+              onClick={fetchCases}
+              disabled={loading}
+              className="rounded-lg border border-white/10 bg-white/5 p-3 text-gray-300 hover:bg-white/10"
+              title="Refresh cases"
+            >
+              <RefreshCw
+                size={17}
+                className={loading ? "animate-spin" : ""}
+              />
+            </button>
           </div>
         </div>
       </div>
@@ -265,10 +340,12 @@ export default function EncroachmentCases() {
             <h2 className="font-semibold text-white">
               Detected Cases
             </h2>
+
             <p className="mt-1 text-xs text-gray-500">
               {filteredCases.length} records found
             </p>
           </div>
+
           <FileText className="text-gray-500" size={21} />
         </div>
 
@@ -287,76 +364,84 @@ export default function EncroachmentCases() {
             </thead>
 
             <tbody className="divide-y divide-white/5">
-              {filteredCases.map((item) => (
-                <tr
-                  key={item.id}
-                  className="transition hover:bg-white/[0.03]"
-                >
-                  <td className="px-5 py-4 font-semibold text-blue-400">
-                    {item.id}
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <p className="font-medium text-white">
-                      {item.parcel}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {item.location}
-                    </p>
-                  </td>
-
-                  <td className="px-5 py-4 text-gray-300">
-                    {item.area} sq.m
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-medium ${riskStyles[item.risk]}`}
-                    >
-                      {item.risk}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs ${statusStyles[item.status]}`}
-                    >
-                      {item.status}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-4 text-gray-400">
-                    {item.date}
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <button
-                      onClick={() => setSelectedCase(item)}
-                      className="flex items-center gap-2 rounded-lg border border-blue-500/20 px-3 py-2 text-xs text-blue-400 transition hover:bg-blue-500/10"
-                    >
-                      <Eye size={15} />
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredCases.length === 0 && (
+              {loading ? (
                 <tr>
-                  <td
-                    colSpan="7"
-                    className="px-5 py-12 text-center text-gray-500"
-                  >
-                    No matching cases found.
+                  <td colSpan="7" className="px-5 py-12 text-center text-gray-400">
+                    Loading cases...
                   </td>
                 </tr>
+              ) : (
+                <>
+                  {filteredCases.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="transition hover:bg-white/[0.03]"
+                    >
+                      <td className="px-5 py-4 font-semibold text-blue-400">
+                        {item.displayId}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <p className="font-medium text-white">
+                          {item.parcel}
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-500">
+                          {item.location}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-gray-300">
+                        {item.area != null
+                          ? `${Number(item.area).toLocaleString("en-IN")} sq.m`
+                          : "N/A"}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getRiskColor(item.risk)}`}>
+                          {item.risk}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className={`rounded-full border px-3 py-1 text-xs ${getStatusColor(item.status)}`}>
+                          {item.status}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-gray-400">
+                        {item.date}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => openCaseDetails(item)}
+                          className="flex items-center gap-2 rounded-lg border border-blue-500/20 px-3 py-2 text-xs text-blue-400 transition hover:bg-blue-500/10"
+                        >
+                          <Eye size={15} />
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {filteredCases.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="px-5 py-12 text-center text-gray-500">
+                        {cases.length === 0
+                          ? "No encroachment cases available in the database."
+                          : "No matching cases found."}
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Case Details Panel */}
+      {/* Case Details */}
       {selectedCase && (
         <div className="rounded-xl border border-blue-500/20 bg-[#111827] p-5">
 
@@ -365,13 +450,17 @@ export default function EncroachmentCases() {
               <p className="text-xs uppercase tracking-wider text-blue-400">
                 Case Details
               </p>
+
               <h2 className="mt-2 text-2xl font-bold">
-                {selectedCase.id}
+                {selectedCase.displayId}
               </h2>
             </div>
 
             <button
-              onClick={() => setSelectedCase(null)}
+              onClick={() => {
+                setSelectedCase(null);
+                setVerificationHistory([]);
+              }}
               className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
               aria-label="Close case details"
             >
@@ -396,54 +485,71 @@ export default function EncroachmentCases() {
             <div className="rounded-lg bg-[#0B1120] p-4">
               <p className="text-xs text-gray-500">Affected Area</p>
               <p className="mt-2 font-semibold">
-                {selectedCase.area} sq.m
+                {selectedCase.area != null
+                  ? `${selectedCase.area} sq.m`
+                  : "N/A"}
               </p>
             </div>
 
             <div className="rounded-lg bg-[#0B1120] p-4">
-              <p className="text-xs text-gray-500">
-                Illustrative AI Confidence
-              </p>
+              <p className="text-xs text-gray-500">Detection Confidence</p>
               <p className="mt-2 font-semibold">
-                {selectedCase.confidence}%
+                {selectedCase.confidence != null
+                  ? `${selectedCase.confidence}%`
+                  : "Not available"}
               </p>
             </div>
           </div>
 
           <div className="mt-5 rounded-lg border border-white/10 p-4">
             <h3 className="font-semibold">Detection Description</h3>
+
             <p className="mt-2 text-sm leading-6 text-gray-400">
-              {selectedCase.description}
+              {selectedCase.description || "No description available."}
             </p>
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span
-              className={`rounded-full border px-3 py-1 text-xs ${riskStyles[selectedCase.risk]}`}
-            >
+            <span className={`rounded-full border px-3 py-1 text-xs ${getRiskColor(selectedCase.risk)}`}>
               {selectedCase.risk} Risk
             </span>
 
-            <span
-              className={`rounded-full border px-3 py-1 text-xs ${statusStyles[selectedCase.status]}`}
-            >
+            <span className={`rounded-full border px-3 py-1 text-xs ${getStatusColor(selectedCase.status)}`}>
               {selectedCase.status}
             </span>
           </div>
 
+          {/* Reviewer Remarks */}
+          {selectedCase.status === "Under Review" && (
+            <div className="mt-5">
+              <label className="mb-2 block text-sm text-gray-300">
+                Reviewer Remarks
+              </label>
+
+              <textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Enter your observations and verification remarks..."
+                rows={3}
+                className="w-full rounded-lg border border-white/10 bg-[#0B1120] p-3 text-sm text-white outline-none focus:border-blue-500"
+              />
+            </div>
+          )}
+
+          {/* Verification Actions */}
           <div className="mt-5 flex flex-wrap gap-3">
             <button
-              onClick={() => updateStatus(selectedCase.id, "Verified")}
-              disabled={selectedCase.status === "Verified"}
+              onClick={() => submitVerification("Verified")}
+              disabled={saving || selectedCase.status !== "Under Review"}
               className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <CheckCircle2 size={17} />
-              Verify Case
+              {saving ? "Submitting..." : "Verify Case"}
             </button>
 
             <button
-              onClick={() => updateStatus(selectedCase.id, "Rejected")}
-              disabled={selectedCase.status === "Rejected"}
+              onClick={() => submitVerification("Rejected")}
+              disabled={saving || selectedCase.status !== "Under Review"}
               className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <XCircle size={17} />
@@ -451,28 +557,74 @@ export default function EncroachmentCases() {
             </button>
           </div>
 
-          <p className="mt-4 text-xs text-gray-500">
-            Verification actions currently update local demo state only.
-            A human reviewer must check supporting imagery and land records
-            before making an official determination.
+          {/* Verification History */}
+          <div className="mt-7 border-t border-white/10 pt-5">
+            <h3 className="font-semibold">
+              Verification History
+            </h3>
+
+            {verificationHistory.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {verificationHistory.map((record, index) => (
+                  <div
+                    key={record.id || index}
+                    className="rounded-lg border border-white/10 bg-[#0B1120] p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className={`text-sm font-semibold ${
+                        record.decision === "Verified"
+                          ? "text-emerald-400"
+                          : record.decision === "Rejected"
+                          ? "text-red-400"
+                          : "text-yellow-400"
+                      }`}>
+                        {record.decision}
+                      </span>
+
+                      <span className="text-xs text-gray-500">
+                        {record.reviewed_at
+                          ? new Date(record.reviewed_at).toLocaleString("en-IN")
+                          : ""}
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-sm text-gray-400">
+                      {record.remarks || "No remarks provided."}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-gray-500">
+                No verification history available.
+              </p>
+            )}
+          </div>
+
+          <p className="mt-5 text-xs leading-5 text-gray-500">
+            Verification is a human review decision based on available
+            evidence. It does not independently establish legal encroachment.
+            Official determinations require authoritative land records
+            and appropriate administrative review.
           </p>
         </div>
       )}
 
-      {/* Demo Notice */}
+      {/* Information Notice */}
       <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
         <AlertTriangle
           size={19}
           className="mt-0.5 shrink-0 text-amber-400"
         />
+
         <p className="text-xs leading-5 text-gray-400">
-          Demonstration data only. Case IDs, locations, areas, dates,
-          risk scores and confidence values are illustrative. The
-          application does not establish legal encroachment.
-          Official decisions require human verification and authoritative
-          land records.
+          Cases displayed here are retrieved from the project database.
+          AI detection results require separate model integration.
+          Human verification and authoritative land records are necessary
+          for official determinations.
         </p>
       </div>
+
     </div>
   );
 }

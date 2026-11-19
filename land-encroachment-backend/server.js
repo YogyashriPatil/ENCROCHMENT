@@ -9,6 +9,9 @@ import imageRoutes from "./src/routes/imageRoutes.js";
 import changeRoutes from "./src/routes/changeRoutes.js";
 import caseRoutes from "./src/routes/caseRoutes.js";
 import verificationRoutes from "./src/routes/verificationRoutes.js";
+import dashboardRoutes from "./src/routes/dashboardRoutes.js";
+import gisRoutes from "./src/routes/gisRoutes.js";
+
 
 dotenv.config();
 
@@ -70,6 +73,8 @@ app.use("/api/images", imageRoutes);
 app.use("/api/changes", changeRoutes);
 app.use("/api/cases", caseRoutes);
 app.use("/api/verifications", verificationRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/gis", gisRoutes);
 // Start server
 const PORT = process.env.PORT || 5000;
 

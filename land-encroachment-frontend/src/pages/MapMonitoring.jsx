@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -7,87 +7,163 @@ import {
   LayersControl,
   LayerGroup,
   ZoomControl,
+  Popup,
 } from "react-leaflet";
 
 import {
   MapPin,
   Layers,
-  Building2,
   AlertTriangle,
-  ShieldCheck,
   Activity,
   Maximize2,
+  RefreshCw,
 } from "lucide-react";
 
-// Sample GIS data for frontend demonstration
-const parcels = [
-  {
-    id: "P-101",
-    name: "Parcel A",
-    area: "750 sq.m",
-    status: "Normal",
-    positions: [
-      [19.9985, 73.7850],
-      [19.9985, 73.7860],
-      [19.9977, 73.7860],
-      [19.9977, 73.7850],
-    ],
-  },
-  {
-    id: "P-102",
-    name: "Parcel B",
-    area: "920 sq.m",
-    status: "Potential Encroachment",
-    positions: [
-      [19.9985, 73.7863],
-      [19.9985, 73.7874],
-      [19.9977, 73.7874],
-      [19.9977, 73.7863],
-    ],
-  },
-  {
-    id: "P-103",
-    name: "Parcel C",
-    area: "680 sq.m",
-    status: "Under Review",
-    positions: [
-      [19.9974, 73.7850],
-      [19.9974, 73.7860],
-      [19.9966, 73.7860],
-      [19.9966, 73.7850],
-    ],
-  },
-];
+import API from "../services/api";
 
-const buildings = [
-  [
-    [19.9982, 73.7865],
-    [19.9982, 73.7869],
-    [19.9979, 73.7869],
-    [19.9979, 73.7865],
-  ],
-];
+const DEFAULT_CENTER = [19.9975, 73.7860];
 
-const restrictedZones = [
-  [
-    [19.9973, 73.7865],
-    [19.9973, 73.7874],
-    [19.9966, 73.7874],
-    [19.9966, 73.7865],
-  ],
-];
+function getPolygonPositions(geojson) {
+  if (!geojson?.coordinates) return [];
+
+  const convertRing = (ring) =>
+    ring.map(([lng, lat]) => [lat, lng]);
+
+  if (geojson.type === "Polygon") {
+    return geojson.coordinates.map(convertRing);
+  }
+
+  if (geojson.type === "MultiPolygon") {
+    return geojson.coordinates.map((polygon) =>
+      polygon.map(convertRing)
+    );
+  }
+
+  return [];
+}
+
+function getStatus(caseItem) {
+  if (caseItem.status === "Verified") return "Verified";
+  if (caseItem.status === "Rejected") return "Rejected";
+  return "Under Review";
+}
 
 export default function MapMonitoring() {
-  const [selectedParcel, setSelectedParcel] = useState(parcels[0]);
+  const [parcels, setParcels] = useState([]);
+  const [changes, setChanges] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [spatialResults, setSpatialResults] = useState([]);
+  const [showOverlaps, setShowOverlaps] = useState(true);
+  const [selectedParcel, setSelectedParcel] = useState(null);
+
   const [showParcels, setShowParcels] = useState(true);
-  const [showBuildings, setShowBuildings] = useState(true);
-  const [showEncroachments, setShowEncroachments] = useState(true);
-  const [showRestricted, setShowRestricted] = useState(true);
+  const [showChanges, setShowChanges] = useState(true);
+  const [showCases, setShowCases] = useState(true);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadGISData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [
+          parcelResponse,
+          changeResponse,
+          caseResponse,
+          spatialResponse,
+        ] = await Promise.all([
+          API.get("/parcels"),
+          API.get("/changes"),
+          API.get("/cases"),
+          API.get("/gis/spatial-analysis"),
+      ]);
+
+      const parcelData = parcelResponse.data.data || [];
+      const changeData = changeResponse.data.data || [];
+      const caseData = caseResponse.data.data || [];
+
+      setParcels(parcelData);
+      setChanges(changeData);
+      setCases(caseData);
+      setSpatialResults(spatialResponse.data.data || []);
+      setSelectedParcel((previous) => {
+        if (previous) {
+          return parcelData.find(
+            (parcel) => parcel.id === previous.id
+          ) || parcelData[0] || null;
+        }
+
+        return parcelData[0] || null;
+      });
+    } catch (err) {
+      console.error("GIS loading error:", err);
+
+      setError(
+        err.response?.data?.message ||
+        "Unable to load GIS data. Check whether the backend is running."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGISData();
+  }, []);
+
+  const totalHighRisk = cases.filter(
+    (item) => item.risk_level === "High"
+  ).length;
+
+  const stats = [
+    {
+      title: "Total Parcels",
+      value: parcels.length,
+      icon: MapPin,
+      color: "text-blue-400",
+    },
+    {
+      title: "Detected Changes",
+      value: changes.length,
+      icon: Activity,
+      color: "text-emerald-400",
+    },
+    {
+      title: "Potential Cases",
+      value: cases.length,
+      icon: AlertTriangle,
+      color: "text-red-400",
+    },
+    {
+      title: "High Risk Cases",
+      value: totalHighRisk,
+      icon: AlertTriangle,
+      color: "text-yellow-400",
+    },
+  ];
+
+  const selectedCases = selectedParcel
+    ? cases.filter(
+        (item) => item.parcel_id === selectedParcel.id
+      )
+    : [];
+  const selectedSpatialResults = selectedParcel
+    ? spatialResults.filter(
+        (item) => item.parcel_id === selectedParcel.id
+      )
+    : [];
+  const selectedChanges = selectedParcel
+    ? changes.filter(
+        (item) => item.parcel_id === selectedParcel.id
+      )
+    : [];
 
   return (
     <div className="space-y-6 text-white">
 
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">
@@ -95,45 +171,19 @@ export default function MapMonitoring() {
           </h1>
 
           <p className="text-gray-400 text-sm mt-2">
-            Monitor land parcels, detected structures and potential encroachments.
+            Monitor land parcels and potential changes using GIS data.
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl">
           <Activity size={16} />
-          GIS Monitoring Active
+          Live Database Connection
         </div>
       </div>
 
       {/* Statistics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-
-        {[
-          {
-            title: "Total Parcels",
-            value: "125",
-            icon: MapPin,
-            color: "text-blue-400",
-          },
-          {
-            title: "Buildings Detected",
-            value: "284",
-            icon: Building2,
-            color: "text-emerald-400",
-          },
-          {
-            title: "Potential Cases",
-            value: "18",
-            icon: AlertTriangle,
-            color: "text-red-400",
-          },
-          {
-            title: "Restricted Zones",
-            value: "12",
-            icon: ShieldCheck,
-            color: "text-yellow-400",
-          },
-        ].map((item) => {
+        {stats.map((item) => {
           const Icon = item.icon;
 
           return (
@@ -157,328 +207,481 @@ export default function MapMonitoring() {
         })}
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="bg-[#111c2e] border border-white/10 rounded-xl p-5 text-gray-300">
+          Loading GIS data...
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-400">
+          {error}
+
+          <button
+            onClick={loadGISData}
+            className="ml-3 underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Map and Details */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+      {!loading && !error && (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
 
-        {/* Interactive Map */}
-        <div className="xl:col-span-3 bg-[#111c2e] border border-white/10 rounded-2xl p-4">
+          {/* Map */}
+          <div className="xl:col-span-3 bg-[#111c2e] border border-white/10 rounded-2xl p-4">
 
-          <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
+              <div>
+                <h2 className="font-semibold text-lg">
+                  Interactive Land Map
+                </h2>
+
+                <p className="text-gray-400 text-xs mt-1">
+                  Real parcel and detected-change records
+                </p>
+              </div>
+
+              <button
+                onClick={loadGISData}
+                className="flex items-center gap-2 text-sm bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg"
+              >
+                <RefreshCw size={15} />
+                Refresh Map
+              </button>
+            </div>
+
+            {/* Layer Controls */}
+            <div className="flex flex-wrap gap-3 mb-4">
+              {[
+                {
+                  label: "Parcels",
+                  checked: showParcels,
+                  setter: setShowParcels,
+                  color: "bg-blue-500",
+                },
+                {
+                  label: "Detected Changes",
+                  checked: showChanges,
+                  setter: setShowChanges,
+                  color: "bg-emerald-500",
+                },
+                {
+                  label: "Potential Cases",
+                  checked: showCases,
+                  setter: setShowCases,
+                  color: "bg-red-500",
+                },
+                {
+                  label: "Spatial Overlaps",
+                  checked: showOverlaps,
+                  setter: setShowOverlaps,
+                  color: "bg-yellow-500",
+                },
+              ].map((layer) => (
+                <label
+                  key={layer.label}
+                  className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer bg-white/5 px-3 py-2 rounded-lg"
+                >
+                  <input
+                    type="checkbox"
+                    checked={layer.checked}
+                    onChange={(e) =>
+                      layer.setter(e.target.checked)
+                    }
+                    className="accent-emerald-500"
+                  />
+
+                  <span className={`w-2 h-2 rounded-full ${layer.color}`} />
+
+                  {layer.label}
+                </label>
+              ))}
+            </div>
+
+            {/* Leaflet */}
+            <div className="h-[500px] rounded-xl overflow-hidden border border-white/10">
+
+              <MapContainer
+                center={DEFAULT_CENTER}
+                zoom={17}
+                scrollWheelZoom={true}
+                zoomControl={false}
+                className="h-full w-full"
+              >
+                <ZoomControl position="bottomright" />
+
+                <LayersControl position="topright">
+
+                  <LayersControl.BaseLayer
+                    checked
+                    name="Satellite Imagery"
+                  >
+                    <TileLayer
+                      attribution="Tiles &copy; Esri"
+                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    />
+                  </LayersControl.BaseLayer>
+
+                  <LayersControl.BaseLayer name="Street Map">
+                    <TileLayer
+                      attribution="&copy; OpenStreetMap contributors"
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                  </LayersControl.BaseLayer>
+
+                  {/* Parcel Boundaries */}
+                  {showParcels && (
+                    <LayersControl.Overlay
+                      checked
+                      name="Land Parcels"
+                    >
+                      <LayerGroup>
+                        {parcels.map((parcel) => {
+                          const positions = getPolygonPositions(
+                            parcel.boundary
+                          );
+
+                          if (!positions.length) return null;
+
+                          return positions.map((polygon, index) => (
+                            <Polygon
+                              key={`${parcel.id}-${index}`}
+                              positions={polygon}
+                              pathOptions={{
+                                color:
+                                  selectedParcel?.id === parcel.id
+                                    ? "#facc15"
+                                    : "#3b82f6",
+                                weight: 2,
+                                fillColor: "#3b82f6",
+                                fillOpacity: 0.12,
+                              }}
+                              eventHandlers={{
+                                click: () => setSelectedParcel(parcel),
+                              }}
+                            >
+                              <Popup>
+                                <strong>{parcel.parcel_code}</strong>
+                                <br />
+                                {parcel.location_name || "Location unavailable"}
+                                <br />
+                                Area: {parcel.area_sq_m ?? "N/A"} sq.m
+                              </Popup>
+                            </Polygon>
+                          ));
+                        })}
+                      </LayerGroup>
+                    </LayersControl.Overlay>
+                  )}
+
+                  {/* Detected Changes */}
+                  {showChanges && (
+                    <LayersControl.Overlay
+                      checked
+                      name="Detected Changes"
+                    >
+                      <LayerGroup>
+                        {changes.map((change) => {
+                          const positions = getPolygonPositions(
+                            change.change_geometry
+                          );
+
+                          if (!positions.length) return null;
+
+                          return positions.map((polygon, index) => (
+                            <Polygon
+                              key={`${change.id}-${index}`}
+                              positions={polygon}
+                              pathOptions={{
+                                color: "#10b981",
+                                fillColor: "#10b981",
+                                fillOpacity: 0.4,
+                                weight: 2,
+                              }}
+                            >
+                              <Popup>
+                                <strong>
+                                  {change.change_type || "Detected change"}
+                                </strong>
+                                <br />
+                                Confidence: {change.confidence ?? "N/A"}%
+                                <br />
+                                Affected area: {change.affected_area_sq_m ?? "N/A"} sq.m
+                              </Popup>
+                            </Polygon>
+                          ));
+                        })}
+                      </LayerGroup>
+                    </LayersControl.Overlay>
+                  )}
+
+                  {/* Spatial Analysis Overlaps */}
+                  {showOverlaps && (
+                    <LayersControl.Overlay
+                      checked
+                      name="Spatial Analysis Overlaps"
+                    >
+                      <LayerGroup>
+                        {spatialResults.map((result) => {
+                          const positions = getPolygonPositions(
+                            result.overlap_geojson
+                          );
+
+                          if (!positions.length) return null;
+
+                          return positions.map((polygon, index) => (
+                            <Polygon
+                              key={`${result.change_id}-${index}`}
+                              positions={polygon}
+                              pathOptions={{
+                                color: "#facc15",
+                                fillColor: "#facc15",
+                                fillOpacity: 0.55,
+                                weight: 3,
+                              }}
+                            >
+                              <Popup>
+                                <strong>Spatial Overlap</strong>
+                                <br />
+                                Parcel: {result.parcel_code}
+                                <br />
+                                Overlap Area: {result.overlap_area_sq_m} sq.m
+                                <br />
+                                Overlap Percentage: {result.overlap_percentage}%
+                                <br />
+                                Change Type: {result.change_type || "N/A"}
+                              </Popup>
+                            </Polygon>
+                          ));
+                        })}
+                      </LayerGroup>
+                    </LayersControl.Overlay>
+                  )}
+
+                  {/* Potential Cases */}
+                  {showCases && (
+                    <LayersControl.Overlay
+                      checked
+                      name="Potential Cases"
+                    >
+                      <LayerGroup>
+                        {cases.map((caseItem) => {
+                          const change = changes.find(
+                            (item) => item.id === caseItem.detected_change_id
+                          );
+
+                          const positions = getPolygonPositions(
+                            change?.change_geometry
+                          );
+
+                          if (!positions.length) return null;
+
+                          const color =
+                            caseItem.risk_level === "High"
+                              ? "#ef4444"
+                              : caseItem.risk_level === "Medium"
+                              ? "#f59e0b"
+                              : "#22c55e";
+
+                          return positions.map((polygon, index) => (
+                            <Polygon
+                              key={`${caseItem.id}-${index}`}
+                              positions={polygon}
+                              pathOptions={{
+                                color,
+                                fillColor: color,
+                                fillOpacity: 0.35,
+                                weight: 3,
+                                dashArray: "6 5",
+                              }}
+                            >
+                              <Popup>
+                                <strong>{caseItem.case_code}</strong>
+                                <br />
+                                Risk: {caseItem.risk_level}
+                                <br />
+                                Status: {getStatus(caseItem)}
+                                <br />
+                                {caseItem.location_name || "Location unavailable"}
+                              </Popup>
+                            </Polygon>
+                          ));
+                        })}
+                      </LayerGroup>
+                    </LayersControl.Overlay>
+                  )}
+
+                </LayersControl>
+              </MapContainer>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-3">
+              Map features are displayed only when valid geometries exist in the database.
+              Potential cases require human and administrative verification.
+            </p>
+          </div>
+
+          {/* Parcel Information */}
+          <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-5 space-y-5">
 
             <div>
               <h2 className="font-semibold text-lg">
-                Interactive Land Map
+                Parcel Information
               </h2>
 
               <p className="text-gray-400 text-xs mt-1">
-                Explore parcels and detected structures
+                Select a parcel on the map
               </p>
             </div>
 
-            <button
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2 text-sm bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg"
-            >
-              <Maximize2 size={15} />
-              Refresh Map
-            </button>
+            {selectedParcel ? (
+              <div className="bg-white/5 rounded-xl p-4 space-y-4">
 
-          </div>
+                <div>
+                  <p className="text-gray-500 text-xs">Parcel Code</p>
+                  <h3 className="font-semibold mt-1">
+                    {selectedParcel.parcel_code}
+                  </h3>
+                </div>
 
-          {/* Map Layer Controls */}
-          <div className="flex flex-wrap gap-3 mb-4">
+                <div>
+                  <p className="text-gray-500 text-xs">Location</p>
+                  <p className="text-sm mt-1">
+                    {selectedParcel.location_name || "Not provided"}
+                  </p>
+                </div>
 
-            {[
-              {
-                label: "Parcels",
-                checked: showParcels,
-                setter: setShowParcels,
-                color: "bg-blue-500",
-              },
-              {
-                label: "Buildings",
-                checked: showBuildings,
-                setter: setShowBuildings,
-                color: "bg-emerald-500",
-              },
-              {
-                label: "Potential Cases",
-                checked: showEncroachments,
-                setter: setShowEncroachments,
-                color: "bg-red-500",
-              },
-              {
-                label: "Restricted Zones",
-                checked: showRestricted,
-                setter: setShowRestricted,
-                color: "bg-yellow-500",
-              },
-            ].map((layer) => (
-              <label
-                key={layer.label}
-                className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer bg-white/5 px-3 py-2 rounded-lg"
-              >
-                <input
-                  type="checkbox"
-                  checked={layer.checked}
-                  onChange={(e) => layer.setter(e.target.checked)}
-                  className="accent-emerald-500"
-                />
+                <div>
+                  <p className="text-gray-500 text-xs">Land Area</p>
+                  <p className="text-sm mt-1">
+                    {selectedParcel.area_sq_m ?? "Not provided"} sq.m
+                  </p>
+                </div>
 
-                <span className={`w-2 h-2 rounded-full ${layer.color}`} />
+                <div>
+                  <p className="text-gray-500 text-xs">Boundary Geometry</p>
+                  <p className="text-sm mt-1">
+                    {selectedParcel.boundary
+                      ? "Available"
+                      : "Not uploaded"}
+                  </p>
+                </div>
 
-                {layer.label}
-              </label>
-            ))}
+                <div>
+                  <p className="text-gray-500 text-xs">Detected Changes</p>
+                  <p className="text-sm mt-1">
+                    {selectedChanges.length}
+                  </p>
+                </div>
 
-          </div>
+                <div>
+                  <p className="text-gray-500 text-xs">
+                    Spatial Overlaps
+                  </p>
+                  <p className="text-sm mt-1">
+                    {selectedSpatialResults.length}
+                  </p>
+                </div>
 
-          {/* Leaflet Map */}
-          <div className="h-[500px] rounded-xl overflow-hidden border border-white/10">
-
-            <MapContainer
-              center={[19.9975, 73.7860]}
-              zoom={17}
-              scrollWheelZoom={true}
-              zoomControl={false}
-              className="h-full w-full"
-            >
-
-              <ZoomControl position="bottomright" />
-
-              <LayersControl position="topright">
-
-                {/* Satellite Layer */}
-                <LayersControl.BaseLayer
-                  checked
-                  name="Satellite Imagery"
-                >
-                  <TileLayer
-                    attribution='Tiles &copy; Esri'
-                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                  />
-                </LayersControl.BaseLayer>
-
-                {/* Street Map */}
-                <LayersControl.BaseLayer name="Street Map">
-                  <TileLayer
-                    attribution='&copy; OpenStreetMap contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                </LayersControl.BaseLayer>
-
-                {/* Parcel Boundaries */}
-                {showParcels && (
-                  <LayersControl.Overlay
-                    checked
-                    name="Land Parcels"
+                {selectedSpatialResults.map((item) => (
+                  <div
+                    key={item.change_id}
+                    className="border-t border-white/10 pt-3"
                   >
-                    <LayerGroup>
-                      {parcels.map((parcel) => (
-                        <Polygon
-                          key={parcel.id}
-                          positions={parcel.positions}
-                          pathOptions={{
-                            color: "#3b82f6",
-                            weight: 2,
-                            fillColor: "#3b82f6",
-                            fillOpacity: 0.12,
-                          }}
-                          eventHandlers={{
-                            click: () => setSelectedParcel(parcel),
-                          }}
-                        />
-                      ))}
-                    </LayerGroup>
-                  </LayersControl.Overlay>
-                )}
+                    <p className="text-gray-400 text-xs">
+                      Overlapping Area
+                    </p>
 
-                {/* Buildings */}
-                {showBuildings && (
-                  <LayersControl.Overlay
-                    checked
-                    name="Detected Buildings"
-                  >
-                    <LayerGroup>
-                      {buildings.map((building, index) => (
-                        <Polygon
-                          key={index}
-                          positions={building}
-                          pathOptions={{
-                            color: "#10b981",
-                            fillColor: "#10b981",
-                            fillOpacity: 0.65,
-                            weight: 2,
-                          }}
-                        />
-                      ))}
-                    </LayerGroup>
-                  </LayersControl.Overlay>
-                )}
+                    <p className="text-lg font-semibold text-yellow-400 mt-1">
+                      {Number(item.overlap_area_sq_m).toFixed(2)} sq.m
+                    </p>
 
-                {/* Potential Encroachments */}
-                {showEncroachments && (
-                  <LayersControl.Overlay
-                    checked
-                    name="Potential Encroachments"
-                  >
-                    <LayerGroup>
-                      <Polygon
-                        positions={buildings[0]}
-                        pathOptions={{
-                          color: "#ef4444",
-                          fillColor: "#ef4444",
-                          fillOpacity: 0.3,
-                          weight: 3,
-                          dashArray: "6 5",
-                        }}
-                      />
-                    </LayerGroup>
-                  </LayersControl.Overlay>
-                )}
+                    <p className="text-gray-400 text-xs mt-2">
+                      Overlap Percentage: {item.overlap_percentage}%
+                    </p>
+                  </div>
+                ))}
 
-                {/* Restricted Zones */}
-                {showRestricted && (
-                  <LayersControl.Overlay
-                    checked
-                    name="Restricted Zones"
-                  >
-                    <LayerGroup>
-                      {restrictedZones.map((zone, index) => (
-                        <Polygon
-                          key={index}
-                          positions={zone}
-                          pathOptions={{
-                            color: "#f59e0b",
-                            fillColor: "#f59e0b",
-                            fillOpacity: 0.35,
-                            weight: 2,
-                          }}
-                        />
-                      ))}
-                    </LayerGroup>
-                  </LayersControl.Overlay>
-                )}
+                <div>
+                  <p className="text-gray-500 text-xs">Potential Cases</p>
+                  <p className="text-sm mt-1">
+                    {selectedCases.length}
+                  </p>
+                </div>
 
-              </LayersControl>
+                <div>
+                  <p className="text-gray-500 text-xs">Case Status</p>
 
-            </MapContainer>
+                  {selectedCases.length > 0 ? (
+                    selectedCases.map((item) => (
+                      <div key={item.id} className="mt-2 text-sm">
+                        <span className="font-medium">
+                          {item.case_code}
+                        </span>
+                        <span className="text-gray-400">
+                          {" "}— {item.status}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-400 mt-1">
+                      No cases recorded
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white/5 rounded-xl p-4 text-sm text-gray-400">
+                No parcels available. Add a parcel with a valid GeoJSON boundary to display it on the map.
+              </div>
+            )}
 
-          </div>
-
-          <p className="text-xs text-gray-500 mt-3">
-            Demonstration map with illustrative parcel coordinates.
-            Imagery and sample overlays are not verified land records.
-          </p>
-
-        </div>
-
-        {/* Parcel Information */}
-        <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-5 space-y-5">
-
-          <div>
-            <h2 className="font-semibold text-lg">
-              Parcel Information
-            </h2>
-
-            <p className="text-gray-400 text-xs mt-1">
-              Select a parcel on the map
-            </p>
-          </div>
-
-          <div className="bg-white/5 rounded-xl p-4 space-y-4">
-
+            {/* Legend */}
             <div>
-              <p className="text-gray-500 text-xs">
-                Parcel ID
-              </p>
-
-              <h3 className="font-semibold mt-1">
-                {selectedParcel.id}
+              <h3 className="font-semibold text-sm mb-3">
+                Map Legend
               </h3>
+
+              {[
+                ["bg-blue-500", "Land Parcel"],
+                ["bg-emerald-500", "Detected Change"],
+                ["bg-red-500", "High Risk Case"],
+                ["bg-yellow-500", "Selected Parcel"],
+                ["bg-yellow-500", "Spatial Overlap"],
+              ].map(([color, label]) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-3 mb-3"
+                >
+                  <span className={`w-3 h-3 rounded-sm ${color}`} />
+                  <span className="text-gray-400 text-xs">
+                    {label}
+                  </span>
+                </div>
+              ))}
             </div>
 
-            <div>
-              <p className="text-gray-500 text-xs">
-                Parcel Name
-              </p>
-
-              <p className="text-sm mt-1">
-                {selectedParcel.name}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-gray-500 text-xs">
-                Land Area
-              </p>
-
-              <p className="text-sm mt-1">
-                {selectedParcel.area}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-gray-500 text-xs">
-                Monitoring Status
-              </p>
-
-              <span className={`inline-block mt-2 text-xs px-3 py-1 rounded-full ${
-                selectedParcel.status === "Normal"
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : selectedParcel.status === "Under Review"
-                  ? "bg-yellow-500/10 text-yellow-400"
-                  : "bg-red-500/10 text-red-400"
-              }`}>
-                {selectedParcel.status}
-              </span>
-            </div>
-
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-sm mb-3">
-              Map Legend
-            </h3>
-
-            {[
-              ["bg-blue-500", "Land Parcel"],
-              ["bg-emerald-500", "Detected Building"],
-              ["bg-red-500", "Potential Encroachment"],
-              ["bg-yellow-500", "Restricted Zone"],
-            ].map(([color, label]) => (
-              <div
-                key={label}
-                className="flex items-center gap-3 mb-3"
-              >
-                <span className={`w-3 h-3 rounded-sm ${color}`} />
-
-                <span className="text-gray-400 text-xs">
-                  {label}
+            <div className="border-t border-white/10 pt-4">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Layers size={16} />
+                <span className="text-sm font-medium">
+                  GIS Layer Management
                 </span>
               </div>
-            ))}
-          </div>
 
-          <div className="border-t border-white/10 pt-4">
-
-            <div className="flex items-center gap-2 text-emerald-400">
-              <Layers size={16} />
-
-              <span className="text-sm font-medium">
-                GIS Layer Management
-              </span>
+              <p className="text-gray-500 text-xs mt-2">
+                Enable or disable map layers to explore database records.
+              </p>
             </div>
 
-            <p className="text-gray-500 text-xs mt-2">
-              Use the layer checkboxes and map controls to explore different geographical datasets.
-            </p>
-
           </div>
-
         </div>
-
-      </div>
+      )}
     </div>
   );
 }

@@ -1,76 +1,21 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import API from "../services/api";
+
 import {
   FileText,
-  Download,
   Search,
   Eye,
   X,
   CalendarDays,
   MapPin,
-  Building2,
   ShieldCheck,
   AlertTriangle,
   FileCheck,
   Printer,
+  RefreshCw,
+  Image as ImageIcon,
 } from "lucide-react";
-
-// Illustrative records for frontend testing.
-// Replace these with backend data later.
-const reportData = [
-  {
-    id: "RPT-001",
-    caseId: "ENC-001",
-    parcel: "P-101",
-    location: "Zone A, Nashik",
-    area: 450,
-    risk: "High",
-    status: "Under Review",
-    date: "2026-11-12",
-    confidence: 94,
-    description:
-      "A possible new building structure was identified near the monitored parcel boundary.",
-  },
-  {
-    id: "RPT-002",
-    caseId: "ENC-002",
-    parcel: "P-102",
-    location: "Zone B, Nashik",
-    area: 280,
-    risk: "Medium",
-    status: "Under Review",
-    date: "2026-11-10",
-    confidence: 86,
-    description:
-      "A possible land-use change was identified in the latest imagery.",
-  },
-  {
-    id: "RPT-003",
-    caseId: "ENC-003",
-    parcel: "P-103",
-    location: "Zone C, Nashik",
-    area: 620,
-    risk: "High",
-    status: "Verified",
-    date: "2026-11-08",
-    confidence: 97,
-    description:
-      "A potential structure expansion requires further administrative review.",
-  },
-  {
-    id: "RPT-004",
-    caseId: "ENC-004",
-    parcel: "P-104",
-    location: "Zone A, Nashik",
-    area: 150,
-    risk: "Low",
-    status: "Rejected",
-    date: "2026-11-05",
-    confidence: 72,
-    description:
-      "An apparent image difference was reviewed and not considered a potential case.",
-  },
-];
 
 function StatCard({ title, value, icon: Icon, color }) {
   return (
@@ -81,31 +26,128 @@ function StatCard({ title, value, icon: Icon, color }) {
           <Icon size={20} />
         </div>
       </div>
-      <h2 className="mt-4 text-3xl font-bold text-white">
-        {value}
-      </h2>
+      <h2 className="mt-4 text-3xl font-bold text-white">{value}</h2>
     </div>
   );
 }
 
 export default function Reports() {
-  const [reports] = useState(reportData);
+  const [reports, setReports] = useState([]);
+  const [images, setImages] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedReport, setSelectedReport] = useState(null);
+  const [verificationHistory, setVerificationHistory] = useState([]);
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Retrieve cases and uploaded images
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [caseResponse, imageResponse] = await Promise.all([
+        API.get("/cases"),
+        API.get("/images"),
+      ]);
+
+      const caseRecords = caseResponse.data.data || [];
+      const imageRecords = imageResponse.data.data || [];
+
+      setImages(imageRecords);
+
+      const formattedReports = caseRecords.map((item) => ({
+        id: item.id,
+        reportId: `RPT-${String(item.case_code || item.id).slice(-8)}`,
+        caseId: item.case_code || item.id,
+        parcelId: item.parcel_id,
+        parcel: item.parcel_code || item.parcel_id || "Not linked",
+        location: item.location_name || "Location unavailable",
+        area: item.affected_area_sq_m ?? null,
+        risk: item.risk_level || "Not available",
+        status: item.status || "Under Review",
+        date: item.created_at
+          ? new Date(item.created_at).toLocaleDateString("en-IN")
+          : "N/A",
+        confidence: item.confidence ?? item.change_confidence ?? null,
+        description: item.description || "No case description available.",
+        images: imageRecords.filter(
+          (image) =>
+            image.parcel_id &&
+            item.parcel_id &&
+            image.parcel_id === item.parcel_id
+        ),
+      }));
+
+      setReports(formattedReports);
+
+      setSelectedReport((previous) => {
+        if (!previous) return null;
+        return formattedReports.find(
+          (report) => report.id === previous.id
+        ) || null;
+      });
+
+    } catch (err) {
+      console.error("Fetch reports error:", err);
+
+      setError(
+        err.response?.data?.message ||
+        "Unable to retrieve report records."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  // Fetch verification history for selected report
+  const fetchVerificationHistory = async (caseId) => {
+    try {
+      setHistoryLoading(true);
+
+      const response = await API.get(
+        `/verifications/case/${caseId}`
+      );
+
+      setVerificationHistory(response.data.data || []);
+
+    } catch (err) {
+      console.error("Verification history error:", err);
+      setVerificationHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const openReport = (report) => {
+    setSelectedReport(report);
+    setVerificationHistory([]);
+    fetchVerificationHistory(report.id);
+  };
+
+  // Search reports
   const filteredReports = useMemo(() => {
+    const searchText = search.toLowerCase();
+
     return reports.filter((report) =>
       [
-        report.id,
+        report.reportId,
         report.caseId,
         report.parcel,
         report.location,
       ].some((value) =>
-        value.toLowerCase().includes(search.toLowerCase())
+        String(value).toLowerCase().includes(searchText)
       )
     );
   }, [reports, search]);
 
+  // Real database statistics
   const stats = {
     total: reports.length,
     verified: reports.filter((r) => r.status === "Verified").length,
@@ -113,13 +155,21 @@ export default function Reports() {
     review: reports.filter((r) => r.status === "Under Review").length,
   };
 
-  const downloadReport = (report) => {
-    setSelectedReport(report);
+  const downloadReport = () => {
+    window.print();
+  };
 
-    // Wait for the report preview to render before opening print.
-    setTimeout(() => {
-      window.print();
-    }, 300);
+  const riskColor = (risk) => {
+    if (risk === "High") return "bg-red-500/10 text-red-400";
+    if (risk === "Medium") return "bg-amber-500/10 text-amber-400";
+    if (risk === "Low") return "bg-emerald-500/10 text-emerald-400";
+    return "bg-gray-500/10 text-gray-400";
+  };
+
+  const statusColor = (status) => {
+    if (status === "Verified") return "text-emerald-400";
+    if (status === "Rejected") return "text-red-400";
+    return "text-yellow-400";
   };
 
   return (
@@ -142,6 +192,13 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
       {/* Statistics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -150,18 +207,21 @@ export default function Reports() {
           icon={FileText}
           color="bg-blue-500/10 text-blue-400"
         />
+
         <StatCard
           title="Verified Cases"
           value={stats.verified}
           icon={ShieldCheck}
           color="bg-emerald-500/10 text-emerald-400"
         />
+
         <StatCard
           title="High Risk Reports"
           value={stats.highRisk}
           icon={AlertTriangle}
           color="bg-red-500/10 text-red-400"
         />
+
         <StatCard
           title="Awaiting Review"
           value={stats.review}
@@ -172,18 +232,33 @@ export default function Reports() {
 
       {/* Search */}
       <div className="rounded-xl border border-white/10 bg-[#111827] p-4">
-        <div className="relative">
-          <Search
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
-          />
-          <input
-            type="text"
-            placeholder="Search report ID, case ID, parcel or location..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-[#0B1120] py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-blue-500"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+            />
+
+            <input
+              type="text"
+              placeholder="Search case ID, parcel or location..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#0B1120] py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <button
+            onClick={fetchReports}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/10 disabled:opacity-50"
+          >
+            <RefreshCw
+              size={16}
+              className={loading ? "animate-spin" : ""}
+            />
+            Refresh
+          </button>
         </div>
       </div>
 
@@ -211,74 +286,70 @@ export default function Reports() {
             </thead>
 
             <tbody className="divide-y divide-white/5">
-              {filteredReports.map((report) => (
-                <tr
-                  key={report.id}
-                  className="transition hover:bg-white/[0.03]"
-                >
-                  <td className="px-5 py-4 font-semibold text-blue-400">
-                    {report.id}
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <p className="font-medium">{report.caseId}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {report.parcel}
-                    </p>
-                  </td>
-
-                  <td className="px-5 py-4 text-gray-300">
-                    {report.location}
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <span className={`rounded-full px-3 py-1 text-xs ${
-                      report.risk === "High"
-                        ? "bg-red-500/10 text-red-400"
-                        : report.risk === "Medium"
-                        ? "bg-amber-500/10 text-amber-400"
-                        : "bg-emerald-500/10 text-emerald-400"
-                    }`}>
-                      {report.risk}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-4 text-gray-300">
-                    {report.status}
-                  </td>
-
-                  <td className="px-5 py-4 text-gray-400">
-                    {report.date}
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setSelectedReport(report)}
-                        title="View report"
-                        className="rounded-lg border border-white/10 p-2 text-blue-400 hover:bg-blue-500/10"
-                      >
-                        <Eye size={16} />
-                      </button>
-
-                      <button
-                        onClick={() => downloadReport(report)}
-                        title="Export report as PDF"
-                        className="rounded-lg border border-white/10 p-2 text-emerald-400 hover:bg-emerald-500/10"
-                      >
-                        <Download size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredReports.length === 0 && (
+              {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-5 py-12 text-center text-gray-500">
-                    No matching reports found.
+                  <td colSpan="7" className="px-5 py-12 text-center text-gray-400">
+                    Loading reports...
                   </td>
                 </tr>
+              ) : (
+                <>
+                  {filteredReports.map((report) => (
+                    <tr
+                      key={report.id}
+                      className="transition hover:bg-white/[0.03]"
+                    >
+                      <td className="px-5 py-4 font-semibold text-blue-400">
+                        {report.reportId}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <p className="font-medium">{report.caseId}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {report.parcel}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-gray-300">
+                        {report.location}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs ${riskColor(report.risk)}`}>
+                          {report.risk}
+                        </span>
+                      </td>
+
+                      <td className={`px-5 py-4 ${statusColor(report.status)}`}>
+                        {report.status}
+                      </td>
+
+                      <td className="px-5 py-4 text-gray-400">
+                        {report.date}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => openReport(report)}
+                          title="View report"
+                          className="rounded-lg border border-white/10 p-2 text-blue-400 hover:bg-blue-500/10"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {filteredReports.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="px-5 py-12 text-center text-gray-500">
+                        {reports.length === 0
+                          ? "No reports available. Create an encroachment case first."
+                          : "No matching reports found."}
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>
@@ -288,18 +359,22 @@ export default function Reports() {
       {/* Report Preview */}
       {selectedReport && (
         <div className="rounded-xl border border-blue-500/20 bg-[#111827] p-5">
+
           <div className="mb-5 flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wider text-blue-400">
                 Report Preview
               </p>
               <h2 className="mt-2 text-2xl font-bold">
-                {selectedReport.id}
+                {selectedReport.reportId}
               </h2>
             </div>
 
             <button
-              onClick={() => setSelectedReport(null)}
+              onClick={() => {
+                setSelectedReport(null);
+                setVerificationHistory([]);
+              }}
               className="rounded-lg p-2 text-gray-400 hover:bg-white/10"
               aria-label="Close report preview"
             >
@@ -307,57 +382,81 @@ export default function Reports() {
             </button>
           </div>
 
-          <div id="report-print-area" className="space-y-5 rounded-lg border border-white/10 bg-[#0B1120] p-5">
+          <div
+            id="report-print-area"
+            className="space-y-5 rounded-lg border border-white/10 bg-[#0B1120] p-5"
+          >
             <div className="border-b border-white/10 pb-4">
-              <h2 className="text-xl font-bold">
-                TERRAWATCH
-              </h2>
+              <h2 className="text-xl font-bold">TERRAWATCH</h2>
+
               <p className="mt-1 text-sm text-gray-400">
                 Land Monitoring & Potential Encroachment Analysis Report
               </p>
+
               <p className="mt-3 text-sm">
-                Report Reference: {selectedReport.id}
+                Report Reference: {selectedReport.reportId}
               </p>
             </div>
 
+            {/* Case Information */}
             <div>
               <h3 className="mb-3 font-semibold">Case Information</h3>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-xs text-gray-500">Case ID</p>
                   <p className="mt-1">{selectedReport.caseId}</p>
                 </div>
+
                 <div>
                   <p className="text-xs text-gray-500">Parcel ID</p>
                   <p className="mt-1">{selectedReport.parcel}</p>
                 </div>
+
                 <div>
                   <p className="text-xs text-gray-500">Location</p>
-                  <p className="mt-1">{selectedReport.location}</p>
+                  <p className="mt-1 flex items-center gap-2">
+                    <MapPin size={15} />
+                    {selectedReport.location}
+                  </p>
                 </div>
+
                 <div>
                   <p className="text-xs text-gray-500">Affected Area</p>
-                  <p className="mt-1">{selectedReport.area} sq.m</p>
+                  <p className="mt-1">
+                    {selectedReport.area != null
+                      ? `${Number(selectedReport.area).toLocaleString("en-IN")} sq.m`
+                      : "Not available"}
+                  </p>
                 </div>
+
                 <div>
-                  <p className="text-xs text-gray-500">Detection Date</p>
+                  <p className="text-xs text-gray-500">Case Date</p>
                   <p className="mt-1">{selectedReport.date}</p>
                 </div>
+
                 <div>
                   <p className="text-xs text-gray-500">Risk Level</p>
                   <p className="mt-1">{selectedReport.risk}</p>
                 </div>
+
                 <div>
                   <p className="text-xs text-gray-500">Review Status</p>
                   <p className="mt-1">{selectedReport.status}</p>
                 </div>
+
                 <div>
-                  <p className="text-xs text-gray-500">Illustrative Model Confidence</p>
-                  <p className="mt-1">{selectedReport.confidence}%</p>
+                  <p className="text-xs text-gray-500">Model Confidence</p>
+                  <p className="mt-1">
+                    {selectedReport.confidence != null
+                      ? `${selectedReport.confidence}%`
+                      : "Not available"}
+                  </p>
                 </div>
               </div>
             </div>
 
+            {/* Description */}
             <div className="border-t border-white/10 pt-4">
               <h3 className="font-semibold">Detection Summary</h3>
               <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -365,25 +464,95 @@ export default function Reports() {
               </p>
             </div>
 
+            {/* Image Evidence */}
             <div className="border-t border-white/10 pt-4">
               <h3 className="font-semibold">Evidence & Imagery</h3>
+
               <p className="mt-2 text-sm text-gray-400">
-                Historical imagery, latest imagery, change-detection
-                overlays and GIS parcel evidence will be attached here
-                when the backend integration is completed.
+                Uploaded images associated with this parcel.
               </p>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-white/20 text-sm text-gray-500">
-                  Historical Image – Pending
+
+              {selectedReport.images.length > 0 ? (
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {selectedReport.images.map((image) => (
+                    <div
+                      key={image.id}
+                      className="rounded-lg border border-white/10 p-3"
+                    >
+                      {image.signed_url ? (
+                        <img
+                          src={image.signed_url}
+                          alt={image.image_name}
+                          className="h-48 w-full rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-48 items-center justify-center rounded-lg bg-white/5 text-gray-500">
+                          Image unavailable
+                        </div>
+                      )}
+
+                      <p className="mt-2 truncate text-sm">
+                        {image.image_name}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        {image.image_type} · {image.image_date || "Date unavailable"}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-white/20 text-sm text-gray-500">
-                  Latest Image – Pending
+              ) : (
+                <div className="mt-4 flex min-h-28 flex-col items-center justify-center rounded-lg border border-dashed border-white/20 text-sm text-gray-500">
+                  <ImageIcon size={24} className="mb-2" />
+                  No images linked to this parcel.
                 </div>
-              </div>
+              )}
             </div>
 
+            {/* Verification History */}
+            <div className="border-t border-white/10 pt-4">
+              <h3 className="font-semibold">Verification History</h3>
+
+              {historyLoading ? (
+                <p className="mt-3 text-sm text-gray-400">
+                  Loading verification history...
+                </p>
+              ) : verificationHistory.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {verificationHistory.map((record, index) => (
+                    <div
+                      key={record.id || index}
+                      className="rounded-lg border border-white/10 p-4"
+                    >
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <span className={`font-semibold ${statusColor(record.decision)}`}>
+                          {record.decision}
+                        </span>
+
+                        <span className="text-xs text-gray-500">
+                          {record.reviewed_at
+                            ? new Date(record.reviewed_at).toLocaleString("en-IN")
+                            : ""}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm text-gray-400">
+                        {record.remarks || "No remarks provided."}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-gray-500">
+                  No verification history available.
+                </p>
+              )}
+            </div>
+
+            {/* Disclaimer */}
             <div className="border-t border-white/10 pt-4">
               <h3 className="font-semibold">Important Disclaimer</h3>
+
               <p className="mt-2 text-xs leading-5 text-gray-400">
                 This report presents a potential change identified for
                 further investigation. AI output does not establish
@@ -393,9 +562,10 @@ export default function Reports() {
             </div>
           </div>
 
+          {/* Export */}
           <div className="mt-5 flex flex-wrap gap-3">
             <button
-              onClick={() => window.print()}
+              onClick={downloadReport}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium hover:bg-blue-500"
             >
               <Printer size={17} />
@@ -412,13 +582,18 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Demo Notice */}
+      {/* Information Notice */}
       <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-        <AlertTriangle size={19} className="mt-0.5 shrink-0 text-amber-400" />
+        <AlertTriangle
+          size={19}
+          className="mt-0.5 shrink-0 text-amber-400"
+        />
+
         <p className="text-xs leading-5 text-gray-400">
-          All report records and confidence values are illustrative.
-          Image evidence is not yet connected. Reports are generated
-          from frontend demo data.
+          Reports are generated from database case records. Images are
+          displayed only when associated with the case parcel. AI
+          confidence is shown only when supplied by the backend.
+          Reports do not independently establish legal encroachment.
         </p>
       </div>
 
@@ -447,6 +622,11 @@ export default function Reports() {
             width: 100%;
             background: white !important;
             border: none !important;
+          }
+
+          #report-print-area img {
+            max-height: 250px;
+            object-fit: contain;
           }
 
           #report-print-area .border-white\\/10 {
