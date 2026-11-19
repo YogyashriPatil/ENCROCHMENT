@@ -13,4 +13,4 @@ node_modules/
 .vite/
 
 # Large AI model checkpoints
-land-encroachment-ai/weights/changeformer/best_ckpt.pt
+weights/changeformer/best_ckpt.ptgit add .
