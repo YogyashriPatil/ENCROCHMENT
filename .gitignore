@@ -1,0 +1,10 @@
+# AI Model Weights
+land-encroachment-ai/weights/changeformer/best_ckpt.pt
+land-encroachment-ai/weights/yolo/best.pt
+
+# Python generated files
+__pycache__/
+*.pyc
+
+# Node modules
+node_modules/

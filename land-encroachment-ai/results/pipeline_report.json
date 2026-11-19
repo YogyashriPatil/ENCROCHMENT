@@ -1,0 +1,160 @@
+{
+    "total_buildings": 11,
+    "potential_changes": 8,
+    "building_analysis": [
+        {
+            "building_id": 1,
+            "confidence": 0.4634,
+            "bounding_box": [
+                85.8810043334961,
+                235.3018035888672,
+                133.06826782226562,
+                256.0
+            ],
+            "changed_pixels": 193,
+            "total_pixels": 1008,
+            "overlap_percentage": 19.15,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 2,
+            "confidence": 0.463,
+            "bounding_box": [
+                208.882080078125,
+                144.3872833251953,
+                249.58187866210938,
+                180.5941162109375
+            ],
+            "changed_pixels": 250,
+            "total_pixels": 1476,
+            "overlap_percentage": 16.94,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 3,
+            "confidence": 0.3461,
+            "bounding_box": [
+                229.6795196533203,
+                161.37742614746094,
+                255.98391723632812,
+                197.78297424316406
+            ],
+            "changed_pixels": 380,
+            "total_pixels": 936,
+            "overlap_percentage": 40.6,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 4,
+            "confidence": 0.3007,
+            "bounding_box": [
+                0.0,
+                133.54647827148438,
+                153.8538818359375,
+                256.0
+            ],
+            "changed_pixels": 1713,
+            "total_pixels": 18819,
+            "overlap_percentage": 9.1,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 5,
+            "confidence": 0.2426,
+            "bounding_box": [
+                26.155725479125977,
+                123.8671646118164,
+                83.74159240722656,
+                156.0086669921875
+            ],
+            "changed_pixels": 0,
+            "total_pixels": 1881,
+            "overlap_percentage": 0.0,
+            "status": "No Significant Change"
+        },
+        {
+            "building_id": 6,
+            "confidence": 0.2225,
+            "bounding_box": [
+                116.7306900024414,
+                75.5433578491211,
+                156.05245971679688,
+                110.81817626953125
+            ],
+            "changed_pixels": 304,
+            "total_pixels": 1400,
+            "overlap_percentage": 21.71,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 7,
+            "confidence": 0.2209,
+            "bounding_box": [
+                134.9679718017578,
+                207.4754180908203,
+                175.84536743164062,
+                246.4244384765625
+            ],
+            "changed_pixels": 282,
+            "total_pixels": 1599,
+            "overlap_percentage": 17.64,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 8,
+            "confidence": 0.1935,
+            "bounding_box": [
+                83.50019836425781,
+                37.409912109375,
+                140.01913452148438,
+                68.04237365722656
+            ],
+            "changed_pixels": 0,
+            "total_pixels": 1767,
+            "overlap_percentage": 0.0,
+            "status": "No Significant Change"
+        },
+        {
+            "building_id": 9,
+            "confidence": 0.1846,
+            "bounding_box": [
+                114.77181243896484,
+                186.613037109375,
+                151.34999084472656,
+                216.9857940673828
+            ],
+            "changed_pixels": 377,
+            "total_pixels": 1110,
+            "overlap_percentage": 33.96,
+            "status": "Potential Change Detected"
+        },
+        {
+            "building_id": 10,
+            "confidence": 0.1711,
+            "bounding_box": [
+                10.663372993469238,
+                0.01468658447265625,
+                50.72704315185547,
+                7.716848850250244
+            ],
+            "changed_pixels": 0,
+            "total_pixels": 280,
+            "overlap_percentage": 0.0,
+            "status": "No Significant Change"
+        },
+        {
+            "building_id": 11,
+            "confidence": 0.1685,
+            "bounding_box": [
+                67.2309341430664,
+                153.53662109375,
+                102.6953353881836,
+                193.44790649414062
+            ],
+            "changed_pixels": 157,
+            "total_pixels": 1400,
+            "overlap_percentage": 11.21,
+            "status": "Potential Change Detected"
+        }
+    ]
+}

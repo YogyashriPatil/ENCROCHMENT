@@ -11,7 +11,7 @@ import caseRoutes from "./src/routes/caseRoutes.js";
 import verificationRoutes from "./src/routes/verificationRoutes.js";
 import dashboardRoutes from "./src/routes/dashboardRoutes.js";
 import gisRoutes from "./src/routes/gisRoutes.js";
-
+import aiRoutes from "./src/routes/aiRoutes.js";
 
 dotenv.config();
 
@@ -75,6 +75,7 @@ app.use("/api/cases", caseRoutes);
 app.use("/api/verifications", verificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/gis", gisRoutes);
+app.use("/api/ai", aiRoutes);
 // Start server
 const PORT = process.env.PORT || 5000;
 

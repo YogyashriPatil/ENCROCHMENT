@@ -46,7 +46,7 @@ function ImageUploadCard({
       <label className="block cursor-pointer">
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/tiff"
+          accept="image/jpeg,image/png,image/tiff"
           className="hidden"
           onChange={(e) => onChange(e.target.files?.[0] || null)}
         />
@@ -131,6 +131,12 @@ export default function ImageAnalysis() {
   const [newType, setNewType] = useState("Satellite");
 
   const [analysisDone, setAnalysisDone] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [visualizationSize, setVisualizationSize] = useState({
+    width: 0,
+    height: 0
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -160,6 +166,7 @@ export default function ImageAnalysis() {
   useEffect(() => {
     loadGalleryImages();
   }, []);
+  
   const handleAnalysis = async () => {
     if (!oldImage || !newImage) {
       setError("Please upload both previous and latest images.");
@@ -174,10 +181,12 @@ export default function ImageAnalysis() {
     setError("");
     setSuccess("");
     setAnalysisDone(false);
+    setAiAnalysis(null);
     setUploadedImages([]);
     setLoading(true);
 
     try {
+      // Step 1: Upload an image to Supabase.
       const uploadOneImage = async (file, imageType, imageDate) => {
         const formData = new FormData();
 
@@ -185,48 +194,90 @@ export default function ImageAnalysis() {
         formData.append("image_type", imageType);
         formData.append("image_date", imageDate);
 
-        const response = await API.post(
-          "/images/upload",
-          formData
-        );
+        const response = await API.post("/images/upload", formData);
 
         return response.data;
       };
 
-      // Upload previous image first.
+      // Step 2: Upload previous image.
       const oldResult = await uploadOneImage(
         oldImage,
         oldType,
         oldDate
       );
 
-      // Upload latest image.
+      const oldRecord =
+        oldResult?.data ?? oldResult?.image ?? oldResult;
+
+      // Step 3: Upload latest image.
       const newResult = await uploadOneImage(
         newImage,
         newType,
         newDate
       );
 
-      setUploadedImages([
-        oldResult.data,
-        newResult.data,
-      ]);
+      const newRecord =
+        newResult?.data ?? newResult?.image ?? newResult;
 
-      setSuccess("Both images uploaded successfully to Supabase Storage!");
+      setUploadedImages([oldRecord, newRecord]);
+
+      // Step 4: Prepare AI request.
+      const aiFormData = new FormData();
+
+      aiFormData.append("before_image", oldImage);
+      aiFormData.append("after_image", newImage);
+
+      // Associate detections with the uploaded image records.
+      if (oldRecord?.id) {
+        aiFormData.append("old_image_id", oldRecord.id);
+      }
+
+      if (newRecord?.id) {
+        aiFormData.append("new_image_id", newRecord.id);
+      }
+
+      // Step 5: Send images to Express -> FastAPI.
+      const aiResponse = await API.post(
+        "/ai/analyze",
+        aiFormData,
+        {
+          timeout: 240000
+        }
+      );
+
+      const result = aiResponse.data;
+
+      if (!result?.success) {
+        throw new Error(
+          result?.message || "AI analysis was unsuccessful."
+        );
+      }
+
+      // Step 6: Display saved AI results.
+      setAiAnalysis(result);
       setAnalysisDone(true);
+
+      setSuccess(
+        "AI analysis completed! Building detections have been saved in Supabase."
+      );
+
+      // Step 7: Refresh the uploaded image gallery.
       await loadGalleryImages();
+
     } catch (err) {
-      console.error("Image upload error:", err);
+      console.error("AI image analysis error:", err);
 
       setError(
         err.response?.data?.message ||
-        "Image upload failed. Please check your backend connection."
+        err.message ||
+        "Image upload or AI analysis failed."
       );
 
     } finally {
       setLoading(false);
     }
   };
+
 
   const resetAnalysis = () => {
     setOldImage(null);
@@ -240,8 +291,13 @@ export default function ImageAnalysis() {
 
     setAnalysisDone(false);
     setUploadedImages([]);
+    setAiAnalysis(null);
+
     setError("");
     setSuccess("");
+
+    setSelectedBuilding(null);
+    setVisualizationSize({ width: 0, height: 0 });  
   };
 
   return (
@@ -377,7 +433,7 @@ export default function ImageAnalysis() {
             <ScanSearch size={18} />
           )}
 
-          {loading ? "Uploading Images..." : "Upload & Compare"}
+          {loading ? "Uploading & Running AI..." : "Upload & Analyze"}
 
           {!loading && <ArrowRight size={17} />}
         </button>
@@ -481,6 +537,238 @@ export default function ImageAnalysis() {
             </p>
 
           </div>
+
+          {/* Upload Results */}
+          {analysisDone && (
+            <div className="space-y-5">
+
+              {/* Image Upload Successful */}
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="text-emerald-400" />
+                <h2 className="text-xl font-semibold">
+                  Image Upload Successful
+                </h2>
+              </div>
+
+              {/* Your existing Previous and Latest Image preview cards */}
+              {/* KEEP YOUR EXISTING IMAGE PREVIEW CODE HERE */}
+
+              {/* REPLACE OLD YELLOW CARD WITH NEW AI RESULTS */}
+              {aiAnalysis && (
+                <div className="bg-[#111c2e] border border-emerald-500/20 rounded-2xl p-5 space-y-5">
+
+                  <div className="flex items-center gap-2 text-emerald-400">
+                    <CheckCircle2 size={20} />
+                    <h3 className="font-semibold text-lg">
+                      AI Analysis Completed
+                    </h3>
+                  </div>
+
+                  <p className="text-xs text-gray-400 break-all">
+                    Analysis ID: {aiAnalysis.analysis_run_id}
+                  </p>
+                  {/* Annotated Building Detection Visualization */}
+                  
+                  {/* Interactive Building Detection Visualization */}
+                  {aiAnalysis.visualization_url && (
+                    <div className="space-y-4">
+
+                      <h3 className="font-semibold text-lg">
+                        Select a Detected Building
+                      </h3>
+
+                      <div className="relative w-full bg-black/30 rounded-xl overflow-hidden">
+
+                        <img
+                          src={aiAnalysis.visualization_url}
+                          alt="Building detection visualization"
+                          className="block w-full h-auto"
+                          onLoad={(event) => {
+                            setVisualizationSize({
+                              width: event.currentTarget.naturalWidth,
+                              height: event.currentTarget.naturalHeight
+                            });
+                          }}
+                        />
+
+                        {visualizationSize.width > 0 && (
+                          <svg
+                            viewBox={`0 0 ${visualizationSize.width} ${visualizationSize.height}`}
+                            preserveAspectRatio="none"
+                            className="absolute inset-0 w-full h-full"
+                            style={{ pointerEvents: "none" }}
+                          >
+                            {(aiAnalysis.data?.building_analysis || []).map((building) => {
+                              const [x1, y1, x2, y2] = building.bounding_box || [];
+
+                              const isSelected =
+                                selectedBuilding?.building_id === building.building_id;
+
+                              if (
+                                ![x1, y1, x2, y2].every(Number.isFinite)
+                              ) {
+                                return null;
+                              }
+
+                              return (
+                                <g
+                                  key={building.building_id}
+                                  onClick={() => setSelectedBuilding(building)}
+                                  style={{ pointerEvents: "auto", cursor: "pointer" }}
+                                >
+                                  <rect
+                                    x={x1}
+                                    y={y1}
+                                    width={Math.max(0, x2 - x1)}
+                                    height={Math.max(0, y2 - y1)}
+                                    fill={isSelected ? "rgba(59,130,246,0.25)" : "transparent"}
+                                    stroke={isSelected ? "#3B82F6" : "transparent"}
+                                    strokeWidth={Math.max(2, visualizationSize.width / 400)}
+                                  />
+                                </g>
+                              );
+                            })}
+                          </svg>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-gray-400">
+                        Select a building from the detection table below to inspect it.
+                        Its bounding box will be highlighted in blue.
+                      </p>
+
+                      {selectedBuilding && (
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 space-y-3">
+
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-blue-400">
+                              Building #{selectedBuilding.building_id}
+                            </h3>
+
+                            <button
+                              onClick={() => setSelectedBuilding(null)}
+                              className="text-sm text-gray-400 hover:text-white"
+                            >
+                              Clear selection
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+                            <div>
+                              <p className="text-xs text-gray-400">Confidence</p>
+                              <p className="font-semibold">
+                                {(Number(selectedBuilding.confidence) * 100).toFixed(2)}%
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-gray-400">Change Overlap</p>
+                              <p className="font-semibold">
+                                {Number(selectedBuilding.overlap_percentage).toFixed(2)}%
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-gray-400">Changed Pixels</p>
+                              <p className="font-semibold">
+                                {selectedBuilding.changed_pixels}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-gray-400">Total Pixels</p>
+                              <p className="font-semibold">
+                                {selectedBuilding.total_pixels}
+                              </p>
+                            </div>
+
+                          </div>
+
+                          <p className="text-sm">
+                            Status: {selectedBuilding.detection_status}
+                          </p>
+
+                        </div>
+                      )}
+
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <p className="text-gray-400 text-xs">Total Buildings</p>
+                      <h3 className="text-2xl font-bold mt-2">
+                        {aiAnalysis.total_buildings ?? 0}
+                      </h3>
+                    </div>
+
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <p className="text-gray-400 text-xs">Potential Changes</p>
+                      <h3 className="text-2xl font-bold text-yellow-400 mt-2">
+                        {aiAnalysis.potential_changes ?? 0}
+                      </h3>
+                    </div>
+
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <p className="text-gray-400 text-xs">Saved Records</p>
+                      <h3 className="text-2xl font-bold text-emerald-400 mt-2">
+                        {aiAnalysis.saved_records ?? 0}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <h3 className="font-semibold">
+                    Building-wise Detection Results
+                  </h3>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-gray-400 border-b border-white/10">
+                        <tr>
+                          <th className="p-3">Building</th>
+                          <th className="p-3">Confidence</th>
+                          <th className="p-3">Overlap</th>
+                          <th className="p-3">Status</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {(aiAnalysis.data?.building_analysis || []).map((building) => (
+                          <tr
+                            key={building.id || building.building_id}
+                            onClick={() => setSelectedBuilding(building)}
+                            className={`border-b border-white/5 cursor-pointer transition ${
+                              selectedBuilding?.building_id === building.building_id
+                                ? "bg-blue-500/20"
+                                : "hover:bg-white/5"
+                            }`}
+                          >
+                            <td className="p-3">{building.building_id}</td>
+                            <td className="p-3">
+                              {(Number(building.confidence) * 100).toFixed(2)}%
+                            </td>
+                            <td className="p-3">
+                              {Number(building.overlap_percentage).toFixed(2)}%
+                            </td>
+                            <td className="p-3">
+                              {building.detection_status}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="text-xs text-gray-400">
+                    AI-generated potential changes require spatial assessment
+                    and human verification.
+                  </p>
+                </div>
+              )}
+
+            </div>
+          )}
 
         </div>
       )}

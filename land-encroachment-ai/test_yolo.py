@@ -1,64 +1,32 @@
 
-# Import Path to handle file locations
-from pathlib import Path
+# Import the ChangeDetector class
+from app.models.change_detector import ChangeDetector
 
-# Import our BuildingDetector class
-from app.models.building_detector import BuildingDetector
+# Display the test starting message
+print("\nStarting ChangeFormer model loading test...")
 
+try:
+    # Create the ChangeDetector object
+    # This loads the trained checkpoint
+    detector = ChangeDetector()
 
-# Get the project root directory
-project_root = Path(__file__).resolve().parent
+    # Display successful loading message
+    print("\nSUCCESS: ChangeFormer loaded correctly!")
 
-# Set the input image path
-image_path = project_root / "uploads" / "test.jpg"
+    # Display the selected processing device
+    print("Device:", detector.device)
 
-# Set the output image path
-output_path = project_root / "results" / "yolo_test_result.jpg"
+    # Display the model architecture
+    print("Architecture: ChangeFormerV6")
 
-# Check whether the input image exists
-if not image_path.exists():
-    raise FileNotFoundError(f"Image not found: {image_path}")
+except Exception as error:
 
-# Create the building detector
-detector = BuildingDetector()
+    # Display the error if model loading fails
+    print("\nChangeFormer loading failed!")
 
-# Run building detection
-detections = detector.detect_buildings(
-    image_path=str(image_path),
-    confidence=0.15
-)
+    # Print the complete error message
+    print("Error:", error)
 
-# Display the total number of buildings
-print("\nTotal buildings detected:", len(detections))
-
-# Run YOLO again to get the annotated image
-results = detector.model.predict(
-    source=str(image_path),
-    conf=0.15,
-    imgsz=640,
-    save=False,
-    verbose=False
-)
-
-# Create the results folder if it does not exist
-output_path.parent.mkdir(parents=True, exist_ok=True)
-
-# Draw bounding boxes and confidence labels
-annotated_image = results[0].plot()
-
-# Save the annotated image
-from PIL import Image
-
-Image.fromarray(annotated_image[:, :, ::-1]).save(output_path)
-
-# Display the detected building details
-for index, detection in enumerate(detections, start=1):
-
-    print(f"\nBuilding {index}")
-    print("Class:", detection["class"])
-    print("Confidence:", round(detection["confidence"], 4))
-    print("Bounding Box:", detection["bbox"])
-
-# Display the saved image location
-print("\nAnnotated image saved successfully!")
-print("Output:", output_path)
+    # Print detailed error information
+    import traceback
+    traceback.print_exc()
