@@ -2,3 +2,15 @@
 # Python cache files
 __pycache__/
 *.py[cod]
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Node modules
+node_modules/
+
+# Vite cache
+.vite/
+
+# Large AI model checkpoints
+land-encroachment-ai/weights/changeformer/best_ckpt.pt
