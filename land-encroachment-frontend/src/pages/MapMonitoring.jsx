@@ -55,7 +55,8 @@ export default function MapMonitoring() {
   const [spatialResults, setSpatialResults] = useState([]);
   const [showOverlaps, setShowOverlaps] = useState(true);
   const [selectedParcel, setSelectedParcel] = useState(null);
-
+  const [riskAssessments, setRiskAssessments] = useState([]);
+  const [showRiskLayer, setShowRiskLayer] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
   const [showChanges, setShowChanges] = useState(true);
   const [showCases, setShowCases] = useState(true);
@@ -69,25 +70,28 @@ export default function MapMonitoring() {
       setError("");
 
       const [
-          parcelResponse,
-          changeResponse,
-          caseResponse,
-          spatialResponse,
-        ] = await Promise.all([
-          API.get("/parcels"),
-          API.get("/changes"),
-          API.get("/cases"),
-          API.get("/gis/spatial-analysis"),
+        parcelResponse,
+        changeResponse,
+        caseResponse,
+        spatialResponse,
+        riskResponse,
+      ] = await Promise.all([
+        API.get("/parcels"),
+        API.get("/changes"),
+        API.get("/cases"),
+        API.get("/gis/spatial-analysis"),
+        API.get("/gis/risk-assessment"),
       ]);
 
       const parcelData = parcelResponse.data.data || [];
       const changeData = changeResponse.data.data || [];
       const caseData = caseResponse.data.data || [];
-
+      
       setParcels(parcelData);
       setChanges(changeData);
       setCases(caseData);
       setSpatialResults(spatialResponse.data.data || []);
+      setRiskAssessments(riskResponse.data.data || []);
       setSelectedParcel((previous) => {
         if (previous) {
           return parcelData.find(
@@ -142,6 +146,7 @@ export default function MapMonitoring() {
       icon: AlertTriangle,
       color: "text-yellow-400",
     },
+    
   ];
 
   const selectedCases = selectedParcel
@@ -151,6 +156,12 @@ export default function MapMonitoring() {
     : [];
   const selectedSpatialResults = selectedParcel
     ? spatialResults.filter(
+        (item) => item.parcel_id === selectedParcel.id
+      )
+    : [];
+
+  const selectedRiskAssessments = selectedParcel
+    ? riskAssessments.filter(
         (item) => item.parcel_id === selectedParcel.id
       )
     : [];
@@ -281,6 +292,12 @@ export default function MapMonitoring() {
                   checked: showOverlaps,
                   setter: setShowOverlaps,
                   color: "bg-yellow-500",
+                },
+                {
+                  label: "Risk Assessment",
+                  checked: showRiskLayer,
+                  setter: setShowRiskLayer,
+                  color: "bg-red-500",
                 },
               ].map((layer) => (
                 <label
@@ -463,6 +480,66 @@ export default function MapMonitoring() {
                     </LayersControl.Overlay>
                   )}
 
+
+                  {/* Risk Assessment Layer */}
+                  {showRiskLayer && (
+                    <LayersControl.Overlay
+                      checked
+                      name="Risk Assessment"
+                    >
+                      <LayerGroup>
+                        {riskAssessments.map((risk) => {
+                          const change = changes.find(
+                            (item) => item.id === risk.change_id
+                          );
+
+                          const positions = getPolygonPositions(
+                            change?.change_geometry
+                          );
+
+                          if (!positions.length) return null;
+
+                          const color =
+                            risk.risk_level === "High"
+                              ? "#ef4444"
+                              : risk.risk_level === "Medium"
+                              ? "#f59e0b"
+                              : "#22c55e";
+
+                          return positions.map((polygon, index) => (
+                            <Polygon
+                              key={`${risk.change_id}-${index}`}
+                              positions={polygon}
+                              pathOptions={{
+                                color,
+                                fillColor: color,
+                                fillOpacity: 0.20,
+                                weight: 3,
+                                dashArray: "5 5",
+                              }}
+                            >
+                              <Popup>
+                                <strong>Risk Assessment</strong>
+                                <br />
+                                Parcel: {risk.parcel_code}
+                                <br />
+                                Risk Level: {risk.risk_level}
+                                <br />
+                                Risk Score: {risk.risk_score}/100
+                                <br />
+                                Overlap Area: {risk.overlap_area_sq_m} sq.m
+                                <br />
+                                Overlap: {risk.overlap_percentage}%
+                              </Popup>
+                            </Polygon>
+                          ));
+                        })}
+                      </LayerGroup>
+                    </LayersControl.Overlay>
+                  )}
+
+                  
+
                   {/* Potential Cases */}
                   {showCases && (
                     <LayersControl.Overlay
@@ -607,6 +684,65 @@ export default function MapMonitoring() {
                   </div>
                 ))}
 
+
+                {/* Risk Assessment Information */}
+                <div className="border-t border-white/10 pt-3">
+                  <p className="text-gray-500 text-xs">
+                    Risk Assessments
+                  </p>
+
+                  <p className="text-sm mt-1">
+                    {selectedRiskAssessments.length}
+                  </p>
+                </div>
+
+                {selectedRiskAssessments.map((item) => (
+                  <div
+                    key={item.change_id}
+                    className="bg-white/5 rounded-lg p-3 space-y-2"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">
+                        Risk Score
+                      </span>
+
+                      <span className="text-lg font-bold">
+                        {Number(item.risk_score).toFixed(2)}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`inline-block text-xs px-3 py-1 rounded-full ${
+                        item.risk_level === "High"
+                          ? "bg-red-500/10 text-red-400"
+                          : item.risk_level === "Medium"
+                          ? "bg-amber-500/10 text-amber-400"
+                          : "bg-emerald-500/10 text-emerald-400"
+                      }`}
+                    >
+                      {item.risk_level} Priority
+                    </span>
+
+                    <div className="text-xs text-gray-400 space-y-1">
+                      <p>
+                        Confidence contribution:{" "}
+                        {item.score_breakdown?.confidence_contribution ?? "N/A"}
+                      </p>
+
+                      <p>
+                        Overlap contribution:{" "}
+                        {item.score_breakdown?.overlap_contribution ?? "N/A"}
+                      </p>
+
+                      <p>
+                        Area contribution:{" "}
+                        {item.score_breakdown?.area_contribution ?? "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+
                 <div>
                   <p className="text-gray-500 text-xs">Potential Cases</p>
                   <p className="text-sm mt-1">
@@ -653,6 +789,9 @@ export default function MapMonitoring() {
                 ["bg-red-500", "High Risk Case"],
                 ["bg-yellow-500", "Selected Parcel"],
                 ["bg-yellow-500", "Spatial Overlap"],
+                ["bg-red-500", "High Risk"],
+                ["bg-orange-500", "Medium Risk"],
+                ["bg-emerald-500", "Low Risk"],
               ].map(([color, label]) => (
                 <div
                   key={label}
