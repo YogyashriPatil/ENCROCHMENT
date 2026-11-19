@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Upload,
   Image as ImageIcon,
@@ -136,7 +135,31 @@ export default function ImageAnalysis() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [uploadedImages, setUploadedImages] = useState([]);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryError, setGalleryError] = useState("");
+  const loadGalleryImages = async () => {
+    try {
+      setGalleryLoading(true);
+      setGalleryError("");
 
+      const response = await API.get("/images");
+
+      setGalleryImages(response.data.data || []);
+    } catch (err) {
+      console.error("Gallery loading error:", err);
+
+      setGalleryError(
+        err.response?.data?.message ||
+        "Unable to retrieve uploaded images."
+      );
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+  useEffect(() => {
+    loadGalleryImages();
+  }, []);
   const handleAnalysis = async () => {
     if (!oldImage || !newImage) {
       setError("Please upload both previous and latest images.");
@@ -191,7 +214,7 @@ export default function ImageAnalysis() {
 
       setSuccess("Both images uploaded successfully to Supabase Storage!");
       setAnalysisDone(true);
-
+      await loadGalleryImages();
     } catch (err) {
       console.error("Image upload error:", err);
 
@@ -461,7 +484,89 @@ export default function ImageAnalysis() {
 
         </div>
       )}
+      {/* Uploaded Image Gallery */}
+      <div className="space-y-4">
 
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">
+              Uploaded Image Gallery
+            </h2>
+
+            <p className="text-gray-400 text-sm mt-1">
+              Images retrieved from Supabase Storage
+            </p>
+          </div>
+
+          <button
+            onClick={loadGalleryImages}
+            disabled={galleryLoading}
+            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg text-sm"
+          >
+            <RefreshCw size={15} />
+            Refresh
+          </button>
+        </div>
+
+        {galleryError && (
+          <p className="text-red-400 text-sm">
+            {galleryError}
+          </p>
+        )}
+
+        {galleryLoading ? (
+          <p className="text-gray-400 text-sm">
+            Loading uploaded images...
+          </p>
+        ) : galleryImages.length === 0 ? (
+          <div className="bg-[#111c2e] border border-white/10 rounded-xl p-8 text-center">
+            <ImageIcon
+              size={35}
+              className="mx-auto text-gray-500 mb-3"
+            />
+
+            <p className="text-gray-400">
+              No uploaded images found.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+            {galleryImages.map((image) => (
+              <div
+                key={image.id}
+                className="bg-[#111c2e] border border-white/10 rounded-xl p-4"
+              >
+                {image.signed_url ? (
+                  <img
+                    src={image.signed_url}
+                    alt={image.image_name}
+                    className="w-full h-48 object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="h-48 flex items-center justify-center bg-white/5 rounded-lg">
+                    <ImageIcon className="text-gray-500" />
+                  </div>
+                )}
+
+                <h3 className="font-medium mt-3 truncate">
+                  {image.image_name}
+                </h3>
+
+                <p className="text-xs text-emerald-400 mt-2">
+                  {image.image_type}
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  Capture Date: {image.image_date || "Not available"}
+                </p>
+              </div>
+            ))}
+
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }

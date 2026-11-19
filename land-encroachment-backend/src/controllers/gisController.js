@@ -259,11 +259,20 @@ export const getRiskAssessment = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Risk assessment error:", error.message);
+    console.log("========== RISK ASSESSMENT ERROR ==========");
 
-    res.status(500).json({
+    console.log("Error object:", error);
+    console.log("Error message:", error?.message);
+    console.log("Error code:", error?.code);
+    console.log("Error detail:", error?.detail);
+    console.log("Error stack:", error?.stack);
+
+    console.log("============================================");
+
+    return res.status(500).json({
       success: false,
       message: "Failed to calculate risk assessment",
+      error: error?.message || String(error),
     });
   }
 };

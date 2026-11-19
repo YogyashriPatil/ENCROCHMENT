@@ -1,0 +1,33 @@
+
+# FastAPI backend
+fastapi
+uvicorn[standard]
+python-multipart
+
+# AI and Deep Learning
+ultralytics
+torch
+torchvision
+timm
+
+# Image Processing
+opencv-python
+Pillow
+numpy
+scipy
+
+# Data Processing
+pandas
+PyYAML
+scikit-learn
+
+# Visualization
+matplotlib
+
+# Geospatial Processing
+rasterio
+geopandas
+shapely
+
+# Configuration
+python-dotenv
