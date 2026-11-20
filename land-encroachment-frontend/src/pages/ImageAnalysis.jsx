@@ -124,7 +124,10 @@ function ImageUploadCard({
 export default function ImageAnalysis() {
   const [oldImage, setOldImage] = useState(null);
   const [newImage, setNewImage] = useState(null);
-
+  const [parcels, setParcels] = useState([]);
+  const [selectedParcel, setSelectedParcel] = useState("");
+  const [parcelsLoading, setParcelsLoading] = useState(false);
+  const [parcelError, setParcelError] = useState("");
   const [oldDate, setOldDate] = useState("2025-01-15");
   const [newDate, setNewDate] = useState("2026-01-15");
 
@@ -147,6 +150,28 @@ export default function ImageAnalysis() {
   const [galleryError, setGalleryError] = useState("");
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const loadParcels = async () => {
+    try {
+      setParcelsLoading(true);
+      setParcelError("");
+
+      const response = await API.get("/parcels");
+
+      const parcelList = response.data.data || [];
+
+      setParcels(parcelList);
+
+    } catch (err) {
+      console.error("Parcel loading error:", err);
+
+      setParcelError(
+        err.response?.data?.message ||
+        "Unable to load land parcels."
+      );
+    } finally {
+      setParcelsLoading(false);
+    }
+  };
   const loadGalleryImages = async () => {
     try {
       setGalleryLoading(true);
@@ -168,6 +193,7 @@ export default function ImageAnalysis() {
   };
   useEffect(() => {
     loadGalleryImages();
+    loadParcels();
   }, []);
   
   useEffect(() => {
@@ -206,6 +232,10 @@ export default function ImageAnalysis() {
   const handleAnalysis = async () => {
     if (!oldImage || !newImage) {
       setError("Please upload both previous and latest images.");
+      return;
+    }
+    if (!selectedParcel) {
+      setError("Please select a land parcel before analysis.");
       return;
     }
 
@@ -262,7 +292,8 @@ export default function ImageAnalysis() {
 
       aiFormData.append("before_image", oldImage);
       aiFormData.append("after_image", newImage);
-
+      // Associate this analysis with the selected land parcel.
+      aiFormData.append("parcel_id", selectedParcel);
       // Associate detections with the uploaded image records.
       if (oldRecord?.id) {
         aiFormData.append("old_image_id", oldRecord.id);
@@ -331,7 +362,8 @@ export default function ImageAnalysis() {
 
     setError("");
     setSuccess("");
-
+    
+    setSelectedParcel("");
     setSelectedBuilding(null);
     setVisualizationSize({ width: 0, height: 0 });  
   };
@@ -398,6 +430,53 @@ export default function ImageAnalysis() {
       </div>
 
       {/* Upload Section */}
+      {/* Parcel Selection */}
+      <div className="bg-[#111c2e] border border-white/10 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity size={20} className="text-emerald-400" />
+
+          <h3 className="font-semibold">
+            Select Land Parcel
+          </h3>
+        </div>
+
+        <p className="text-sm text-gray-400 mb-3">
+          Select the land parcel associated with the satellite images.
+        </p>
+
+        <select
+          value={selectedParcel}
+          onChange={(e) => setSelectedParcel(e.target.value)}
+          disabled={parcelsLoading || loading}
+          className="w-full bg-[#0b1424] border border-white/10 rounded-lg px-4 py-3 text-sm text-white"
+        >
+          <option value="">
+            {parcelsLoading
+              ? "Loading parcels..."
+              : "Choose a land parcel"}
+          </option>
+
+          {parcels.map((parcel) => (
+            <option key={parcel.id} value={parcel.id}>
+              {parcel.parcel_code} - {parcel.location_name}
+            </option>
+          ))}
+        </select>
+
+        {parcelError && (
+          <p className="text-red-400 text-sm mt-2">
+            {parcelError}
+          </p>
+        )}
+
+        {selectedParcel && (
+          <p className="text-emerald-400 text-xs mt-3">
+            Selected parcel: {
+              parcels.find((p) => p.id === selectedParcel)?.parcel_code
+            }
+          </p>
+        )}
+      </div>
       <div>
         <div className="mb-5">
           <h2 className="text-lg font-semibold">

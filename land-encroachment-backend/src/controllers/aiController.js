@@ -19,7 +19,8 @@ const analyzeImages = async (req, res) => {
 
     // 2. Get optional database references
     const { parcel_id, old_image_id, new_image_id } = req.body || {};
-
+    console.log("Received multipart fields:", req.body);
+    console.log("Received parcel_id:", parcel_id);
     const aiServiceUrl = process.env.AI_SERVICE_URL;
 
     if (!aiServiceUrl) {

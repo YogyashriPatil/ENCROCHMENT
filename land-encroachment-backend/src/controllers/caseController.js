@@ -1,6 +1,6 @@
 
 import { query } from "../config/db.js";
-
+import { randomUUID } from "crypto";
 // GET /api/cases
 // Retrieve all cases with parcel information
 export const getAllCases = async (req, res) => {
@@ -233,6 +233,148 @@ export const updateCaseStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update case status",
+    });
+  }
+};
+
+// POST /api/cases/from-ai
+// Create an encroachment case from an AI building detection
+export const createCaseFromAI = async (req, res) => {
+  try {
+    const { ai_detection_id, risk_level, description } = req.body;
+
+    // 1. Validate required fields
+    if (!ai_detection_id || !risk_level) {
+      return res.status(400).json({
+        success: false,
+        message: "AI detection ID and risk level are required."
+      });
+    }
+
+    // 2. Validate risk level
+    if (!["High", "Medium", "Low"].includes(risk_level)) {
+      return res.status(400).json({
+        success: false,
+        message: "Risk level must be High, Medium or Low."
+      });
+    }
+
+    // 3. Get AI detection
+    const detectionResult = await query(
+      `
+      SELECT
+        id,
+        analysis_run_id,
+        parcel_id,
+        building_id,
+        confidence,
+        overlap_percentage,
+        detection_status
+      FROM public.ai_building_detections
+      WHERE id = $1
+      `,
+      [ai_detection_id]
+    );
+
+    if (detectionResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "AI detection not found."
+      });
+    }
+
+    const detection = detectionResult.rows[0];
+
+    // 4. Only potential changes can become cases
+    if (detection.detection_status !== "potential_change") {
+      return res.status(400).json({
+        success: false,
+        message: "Cases can only be created from potential change detections."
+      });
+    }
+
+    if (!detection.parcel_id) {
+      return res.status(400).json({
+        success: false,
+        message: "This AI detection is not linked to a land parcel."
+      });
+    }
+
+    // 5. Check for an existing case
+    const existingCase = await query(
+      `
+      SELECT id, case_code
+      FROM public.encroachment_cases
+      WHERE ai_detection_id = $1
+      `,
+      [ai_detection_id]
+    );
+
+    if (existingCase.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: "A case already exists for this AI detection.",
+        data: existingCase.rows[0]
+      });
+    }
+
+    // 6. Generate unique case code
+    const caseCode = `AI-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+    // 7. Prepare case description
+    const caseDescription = description?.trim() ||
+      `Potential change detected by AI. Building ID: ${detection.building_id}, AI confidence: ${detection.confidence ?? "N/A"}, overlap: ${detection.overlap_percentage ?? 0}%. Requires human verification.`;
+
+    // 8. Create case
+    const result = await query(
+      `
+      INSERT INTO public.encroachment_cases (
+        case_code,
+        parcel_id,
+        ai_detection_id,
+        risk_level,
+        status,
+        description
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+      `,
+      [
+        caseCode,
+        detection.parcel_id,
+        ai_detection_id,
+        risk_level,
+        "Under Review",
+        caseDescription
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Potential encroachment case created from AI detection.",
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("Create AI case error:", error);
+
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "A case already exists for this AI detection."
+      });
+    }
+
+    if (error.code === "22P02" || error.code === "23503") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid AI detection or parcel ID."
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create case from AI detection."
     });
   }
 };

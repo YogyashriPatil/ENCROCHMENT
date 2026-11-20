@@ -2,18 +2,25 @@
 from pathlib import Path
 import rasterio
 
-image_paths = [
-    Path(r"E:\Final-year project\implementation-of-project\land-encroachment-ai\uploads\before.png"),
-    Path(r"E:\Final-year project\implementation-of-project\land-encroachment-ai\uploads\after.png"),
-    Path(r"E:\Final-year project\implementation-of-project\land-encroachment-ai\uploads\test.jpg")
+BASE_DIR = Path(__file__).resolve().parent
+
+images = [
+    BASE_DIR / "uploads" / "before.png",
+    BASE_DIR / "uploads" / "after.png"
 ]
 
-for image_path in image_paths:
-    print("\n" + "=" * 50)
+for image_path in images:
+
+    print("\n" + "=" * 55)
     print("IMAGE:", image_path.name)
+
+    if not image_path.exists():
+        print("File not found:", image_path)
+        continue
 
     try:
         with rasterio.open(image_path) as src:
+
             print("Format:", src.driver)
             print("Width:", src.width)
             print("Height:", src.height)
@@ -21,10 +28,10 @@ for image_path in image_paths:
             print("Bounds:", src.bounds)
             print("Transform:", src.transform)
 
-            if src.crs is None:
-                print("RESULT: No geographic CRS found.")
+            if src.crs is not None:
+                print("Georeferencing: AVAILABLE")
             else:
-                print("RESULT: Geographic reference information found.")
+                print("Georeferencing: NOT AVAILABLE")
 
     except Exception as error:
-        print("Error:", error)
+        print("Could not read image using Rasterio:", error)
