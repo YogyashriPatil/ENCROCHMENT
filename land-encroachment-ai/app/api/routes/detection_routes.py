@@ -74,6 +74,7 @@ async def save_uploaded_image(upload: UploadFile, destination: Path):
         )
 
 
+
 @router.post("/analyze")
 async def analyze_images(
     before_image: UploadFile = File(...),
@@ -103,11 +104,22 @@ async def analyze_images(
                 after_image=str(after_path)
             )
 
-            filename = results.pop("visualization_filename")
+            # Convert saved filenames into API URLs.
+            image_fields = [
+                "before_image",
+                "after_image",
+                "change_mask",
+                "visualization"
+            ]
 
-            results["visualization_url"] = (
-                f"/visualizations/{filename}"
-            )
+            for field in image_fields:
+                filename = results.pop(
+                    f"{field}_filename"
+                )
+
+                results[f"{field}_url"] = (
+                    f"/visualizations/{filename}"
+                )
 
             return {
                 "success": True,

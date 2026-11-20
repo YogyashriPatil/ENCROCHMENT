@@ -142,7 +142,21 @@ const analyzeImages = async (req, res) => {
       data: {
         building_analysis: savedDetections
       },
-      visualization_url: analysisData.visualization_url ? `${aiServiceUrl}${analysisData.visualization_url}` : null,
+      before_image_url: analysisData.before_image_url
+      ? `${aiServiceUrl}${analysisData.before_image_url}`
+      : null,
+
+    after_image_url: analysisData.after_image_url
+      ? `${aiServiceUrl}${analysisData.after_image_url}`
+      : null,
+
+    change_mask_url: analysisData.change_mask_url
+      ? `${aiServiceUrl}${analysisData.change_mask_url}`
+      : null,
+
+    visualization_url: analysisData.visualization_url
+      ? `${aiServiceUrl}${analysisData.visualization_url}`
+      : null
     });
 
   } catch (error) {
